@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-4">
+    {% for block in blocks %}
+    <div class="bg-white rounded-lg shadow p-4">
+        <h2 class="text-xl font-bold mb-4 border-b pb-2">{{ block.name }}</h2>
+        <div class="grid grid-cols-2 gap-2">
+            {% for room in block.rooms.all %}
+                {% for bed in room.bed_spaces.all %}
+                <div class="p-3 rounded text-sm font-semibold text-center shadow-sm 
+                    {% if bed.is_occupied %} bg-emerald-100 text-emerald-800 
+                    {% elif bed.notice_given %} bg-amber-100 text-amber-800 
+                    {% else %} bg-slate-100 text-slate-700 {% endif %}">
+                    <div>{{ bed.identifier }}</div>
+                    {% if bed.is_occupied %}
+                        {% with tenant=bed.tenant_profiles.first %}
+                        <div class="text-xs font-normal mt-1 truncate">
+                            {{ tenant.user.get_full_name }}
+                        </div>
+                        {% endwith %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto p-6">
+    <h1 class="text-2xl font-bold mb-6">Tenant Portal</h1>
+    
+    {% if profile %}
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold mb-4">Your Contract Details</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <p class="text-gray-600">Bed Space:</p>
+                <p class="font-semibold">{{ profile.bed_space.identifier }}</p>
+            </div>
+            <div>
+                <p class="text-gray-600">Move-in Date:</p>
+                <p class="font-semibold">{{ profile.move_in_date }}</p>
+            </div>
+            <div>
+                <p class="text-gray-600">Rent Amount:</p>
+                <p class="font-semibold">K{{ profile.rent_amount }}</p>
+            </div>
+            <div>
+                <p class="text-gray-600">NRC Number:</p>
+                <p class="font-semibold">{{ profile.nrc_number }}</p>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4">
+        <p>No tenant profile found. Please contact administration.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

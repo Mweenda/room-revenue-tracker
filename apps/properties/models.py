@@ -39,6 +39,7 @@ class BedSpace(models.Model):
     label = models.CharField(max_length=1)
     identifier = models.CharField(max_length=20, unique=True, editable=False)
     is_occupied = models.BooleanField(default=False)
+    notice_given = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["identifier"]
