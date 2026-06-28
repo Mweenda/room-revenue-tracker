@@ -1,0 +1,21 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t room-revenue-tracker:staging .
+
+      - name: Staging deployment placeholder
+        run: |
+          echo "Staging deployment workflow ready."
+          echo "Configure registry push and deploy target when staging environment is provisioned."
