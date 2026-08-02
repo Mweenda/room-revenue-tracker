@@ -19,6 +19,11 @@ from apps.revenue.services import monthly_block_revenue, monthly_revenue_totals
 from apps.tenants.models import TenantProfile
 
 
+class HomeView(TemplateView):
+    """Landing page for the application."""
+    template_name = "core/home.html"
+
+
 class PostLoginRedirectView(LoginRequiredMixin, TemplateView):
     """Redirect authenticated users to their role-specific dashboard."""
 
