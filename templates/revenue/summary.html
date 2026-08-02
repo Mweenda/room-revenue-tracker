@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Revenue Summary{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Revenue summary</h1>
+<div class="bg-white border p-4 mb-4">
+  <p>Expected K{{ expected_revenue }} / Verified K{{ verified_revenue }} / Outstanding K{{ outstanding_revenue }}</p>
+  <div class="h-3 bg-slate-100 rounded mt-2 overflow-hidden"><div class="h-full bg-teal-600" style="width: {{ progress_percent }}%"></div></div>
+</div>
+<table class="w-full bg-white border text-sm">
+  <thead><tr class="border-b text-left"><th class="p-2">Block</th><th class="p-2">Expected</th><th class="p-2">Verified</th><th class="p-2">Outstanding</th></tr></thead>
+  <tbody>
+  {% for row in block_breakdown %}
+  <tr class="border-b"><td class="p-2">{{ row.block.code }}</td><td class="p-2">K{{ row.expected }}</td><td class="p-2">K{{ row.verified }}</td><td class="p-2">K{{ row.outstanding }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}My Issues{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">My issues</h1>
+<ul class="space-y-2">
+{% for i in issues %}
+<li class="bg-white border p-3"><a href="{% url 'maintenance:detail' i.pk %}">{{ i.title }}</a> — {{ i.get_status_display }}</li>
+{% empty %}<li>No issues.</li>{% endfor %}
+</ul>
+{% endblock %}

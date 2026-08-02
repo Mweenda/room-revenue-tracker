@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Pending Payments{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Pending verification</h1>
+<form method="get" class="flex flex-wrap gap-2 mb-4">
+  <select name="block" class="border p-2 min-h-[44px]">
+    <option value="">All blocks</option>
+    {% for b in blocks %}<option value="{{ b.code }}" {% if request.GET.block == b.code %}selected{% endif %}>{{ b.code }}</option>{% endfor %}
+  </select>
+  <select name="sort" class="border p-2 min-h-[44px]">
+    <option value="-submitted_at">Newest</option>
+    <option value="amount">Amount ↑</option>
+    <option value="-amount">Amount ↓</option>
+    <option value="bed_space__room__block__code">Block</option>
+  </select>
+  <button class="min-h-[44px] px-3 border bg-white">Filter</button>
+</form>
+<div class="space-y-2">
+{% for p in payments %}
+  <a href="{% url 'revenue:payment_detail' p.pk %}" class="block bg-white border p-4 min-h-[44px]">
+    <div class="flex justify-between gap-2 text-sm">
+      <span>{{ p.bed_space.identifier }} — {{ p.tenant.user.get_full_name|default:p.tenant.user.username }}</span>
+      <span>K{{ p.amount }}</span>
+    </div>
+  </a>
+{% empty %}<p class="text-slate-500">No pending payments.</p>{% endfor %}
+</div>
+{% endblock %}

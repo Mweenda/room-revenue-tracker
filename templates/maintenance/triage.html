@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Maintenance Triage{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Maintenance triage</h1>
+<form method="get" class="flex flex-wrap gap-2 mb-4">
+  <select name="block" class="border p-2 min-h-[44px]"><option value="">All blocks</option>{% for b in blocks %}<option value="{{ b.code }}" {% if request.GET.block == b.code %}selected{% endif %}>{{ b.code }}</option>{% endfor %}</select>
+  <select name="category" class="border p-2 min-h-[44px]"><option value="">All categories</option>{% for val,label in categories %}<option value="{{ val }}" {% if request.GET.category == val %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  <select name="status" class="border p-2 min-h-[44px]"><option value="">All statuses</option>{% for val,label in statuses %}<option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  <button class="min-h-[44px] px-3 border bg-white">Filter</button>
+</form>
+<div class="overflow-x-auto">
+<table class="w-full bg-white border text-sm">
+  <thead><tr class="border-b text-left"><th class="p-2">Bed</th><th class="p-2">Category</th><th class="p-2">Title</th><th class="p-2">Date</th><th class="p-2">Status</th></tr></thead>
+  <tbody>
+  {% for i in issues %}
+  <tr class="border-b"><td class="p-2">{{ i.bed_space.identifier }}</td><td class="p-2">{{ i.get_category_display }}</td><td class="p-2"><a class="underline" href="{% url 'maintenance:detail' i.pk %}">{{ i.title }}</a></td><td class="p-2">{{ i.created_at|date:"Y-m-d" }}</td><td class="p-2">{{ i.get_status_display }}</td></tr>
+  {% empty %}<tr><td class="p-2" colspan="5">No issues.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

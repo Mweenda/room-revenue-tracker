@@ -16,5 +16,14 @@ PASSWORD_HASHERS = [
 ]
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-
 CELERY_TASK_ALWAYS_EAGER = True
+RATELIMIT_ENABLE = False
+
+# Disable axes lockout noise in unit tests unless explicitly testing it
+AXES_ENABLED = False
+
+# Local media for tests
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}

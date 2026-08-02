@@ -1,72 +1,71 @@
 # Room Revenue Tracker
 
-Mobile-responsive Django web application for managing revenue across a 42-room, 4-block residential property.
+Mobile-responsive Django web application for managing revenue across a 42-room, 4-block residential property (BBH, NWG, ANX, CRV).
 
 ## Stack
 
 - Python 3.12 / Django 5.x
 - PostgreSQL
 - Django REST Framework + JWT
-- django-allauth
+- django-allauth, django-axes, django-csp, django-ratelimit
 - Celery + Redis
-- Tailwind CSS + HTMX (progressive enhancement)
+- Tailwind CSS + HTMX
+- Optional S3 storage via django-storages
 
 ## Quick Start
 
-1. Copy environment variables:
+```bash
+cp .env.example .env
+docker compose up --build
+python manage.py seed_property
+```
 
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Start services with Docker:
-
-   ```bash
-   docker compose up --build
-   ```
-
-3. Open the admin panel at [http://localhost:8000/admin/](http://localhost:8000/admin/)
+Admin: [http://localhost:8000/admin/](http://localhost:8000/admin/)
 
 ## Development
-
-Install dependencies:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements/development.txt
-```
-
-Run migrations and tests:
-
-```bash
 python manage.py migrate
+python manage.py seed_property
 pytest
 ```
 
-## Project Structure
+## MVP Milestones
 
+| Milestone | Status |
+|-----------|--------|
+| M1 — Project bootstrap | Done |
+| M2 — Bed space & tenant onboarding | Done |
+| M3 — Revenue ledger & verification | Done |
+| M4 — Utilities subsystem | Done |
+| M5 — Maintenance triage | Done |
+| M6 — Dashboards & reports | Done |
+| M7 — QA, security & production deploy | Done |
+
+See `Docs/MVP_Milestone_Document.pdf` for full acceptance criteria.
+
+## Key URLs
+
+| Role | URL |
+|------|-----|
+| Owner dashboard | `/dashboard/owner/` |
+| Occupancy grid | `/properties/occupancy/` |
+| Tenant onboarding | `/tenants/onboard/` |
+| Tenant portal | `/tenants/portal/` |
+| Submit payment | `/revenue/submit/` |
+| Pending verification | `/revenue/pending/` |
+| Utilities portal | `/utilities/portal/` |
+| Report maintenance | `/maintenance/report/` |
+| CSV exports | `/reports/` |
+| Health check | `/health/` |
+
+## Production
+
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
 ```
-property_tracker/     # Django project settings
-apps/
-  core/               # Shared mixins, dashboards
-  accounts/           # Custom user, auth
-  properties/         # Blocks, rooms, bed spaces
-  tenants/            # Milestone 2
-  revenue/            # Milestone 3
-  utilities/          # Milestone 4
-  maintenance/        # Milestone 5
-  reports/            # Milestone 6
-```
 
-## Milestones
-
-See `Docs/MVP_Milestone_Document.pdf` for the full MVP plan.
-
-- **M1 (current):** Project bootstrap, auth, core models, CI/CD
-- **M2:** Bed space management & tenant onboarding
-- **M3:** Revenue ledger
-- **M4:** Utilities subsystem
-- **M5:** Maintenance triage
-- **M6:** Dashboards & reports
-- **M7:** QA, security & production deployment
+See `Docs/DEPLOYMENT_RUNBOOK.md` for deploy, rollback, and backup steps.

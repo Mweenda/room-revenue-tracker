@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Payment Detail{% endblock %}
+{% block content %}
+<div class="max-w-3xl space-y-4">
+  <h1 class="text-2xl font-bold">Payment {{ payment.transaction_ref }}</h1>
+  <div class="bg-white border p-4 text-sm space-y-1">
+    <p>Tenant: {{ payment.tenant.user.get_full_name|default:payment.tenant.user.username }}</p>
+    <p>Bed space: {{ payment.bed_space.identifier }}</p>
+    <p>Amount: K{{ payment.amount }} ({{ payment.get_payment_method_display }})</p>
+    <p>Status: {{ payment.get_status_display }}</p>
+  </div>
+  {% if payment.proof_image %}
+  <img src="{{ payment.proof_image.url }}" alt="Payment proof" class="max-w-full border">
+  {% endif %}
+  {% if payment.status == 'pending' %}
+  <form method="post" action="{% url 'revenue:verify' payment.pk %}" class="inline">{% csrf_token %}
+    <button class="min-h-[44px] px-4 bg-teal-700 text-white">Verify</button>
+  </form>
+  <form method="post" action="{% url 'revenue:reject' payment.pk %}" class="mt-3 space-y-2">{% csrf_token %}
+    {{ reject_form.as_p }}
+    <button class="min-h-[44px] px-4 bg-red-700 text-white">Reject</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

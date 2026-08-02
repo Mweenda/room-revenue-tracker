@@ -1,0 +1,85 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: property_tracker
+      POSTGRES_PASSWORD: property_tracker
+      POSTGRES_DB: property_tracker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U property_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    command: gunicorn property_tracker.wsgi:application --bind 0.0.0.0:8000 --workers 4
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: property_tracker.settings.production
+      DATABASE_URL: postgres://property_tracker:property_tracker@db:5432/property_tracker
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    expose:
+      - "8000"
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    command: celery -A property_tracker worker -l info
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: property_tracker.settings.production
+      DATABASE_URL: postgres://property_tracker:property_tracker@db:5432/property_tracker
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    depends_on:
+      - web
+      - redis
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    command: celery -A property_tracker beat -l info
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: property_tracker.settings.production
+      DATABASE_URL: postgres://property_tracker:property_tracker@db:5432/property_tracker
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    depends_on:
+      - celery
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Submit Payment{% endblock %}
+{% block content %}
+<div class="max-w-xl bg-white border p-6">
+  <h1 class="text-2xl font-bold mb-4">Submit payment</h1>
+  <form method="post" enctype="multipart/form-data" class="space-y-3">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="min-h-[44px] px-4 bg-teal-700 text-white" type="submit">Submit</button>
+  </form>
+</div>
+{% endblock %}

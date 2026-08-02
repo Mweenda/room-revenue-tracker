@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Utilities{% endblock %}
+{% block content %}
+<div class="max-w-2xl space-y-4">
+  <div class="flex justify-between items-center">
+    <h1 class="text-2xl font-bold">Utilities — {{ block.code }}</h1>
+    <a href="{% url 'utilities:submit_reading' %}" class="min-h-[44px] inline-flex items-center px-3 bg-teal-700 text-white">New reading</a>
+  </div>
+  {% if latest_reading %}
+  <div class="bg-white border p-4 text-sm space-y-1">
+    <p>Latest reading: {{ latest_reading.reading_date }}</p>
+    <p>Total cost: K{{ latest_reading.total_cost }}</p>
+    {% if my_bill %}
+    <p>Owner share: K{{ my_bill.owner_share }}</p>
+    <p>Your excess: K{{ my_bill.tenant_excess }} {% if my_bill.is_paid %}(paid){% else %}(unpaid){% endif %}</p>
+    {% if not my_bill.is_paid and my_bill.tenant_excess > 0 %}
+    <form method="post" action="{% url 'utilities:mark_paid' my_bill.pk %}">{% csrf_token %}
+      <button class="mt-2 min-h-[44px] px-3 border">Mark excess paid</button>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="text-slate-500">No meter readings for this block yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

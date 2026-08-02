@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Reports & exports</h1>
+<div class="grid sm:grid-cols-2 gap-3 max-w-2xl">
+  <a class="min-h-[44px] bg-white border p-4 flex items-center" href="{% url 'reports:export_ledger' %}">Monthly ledger CSV</a>
+  <a class="min-h-[44px] bg-white border p-4 flex items-center" href="{% url 'reports:export_occupancy' %}">Occupancy CSV</a>
+  <a class="min-h-[44px] bg-white border p-4 flex items-center" href="{% url 'reports:export_utility' %}">Utility CSV</a>
+  <a class="min-h-[44px] bg-white border p-4 flex items-center" href="{% url 'reports:export_maintenance' %}">Maintenance CSV</a>
+</div>
+<form class="mt-6 bg-white border p-4 max-w-xl space-y-2" method="get" action="{% url 'reports:export_ledger' %}">
+  <h2 class="font-semibold">Ledger date range</h2>
+  <label class="block text-sm">Start <input type="date" name="start" class="border p-2 w-full min-h-[44px]"></label>
+  <label class="block text-sm">End <input type="date" name="end" class="border p-2 w-full min-h-[44px]"></label>
+  <button class="min-h-[44px] px-4 bg-teal-700 text-white">Export CSV</button>
+</form>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ issue.title }}{% endblock %}
+{% block content %}
+<div class="max-w-3xl space-y-4">
+  <h1 class="text-2xl font-bold">{{ issue.title }}</h1>
+  <div class="bg-white border p-4 text-sm space-y-1">
+    <p>{{ issue.bed_space.identifier }} · {{ issue.get_category_display }} · {{ issue.get_status_display }}</p>
+    <p class="mt-2 whitespace-pre-wrap">{{ issue.description }}</p>
+    {% if issue.resolution_note %}<p class="mt-2 text-teal-800">Resolution: {{ issue.resolution_note }}</p>{% endif %}
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+    {% for photo in issue.photos.all %}
+    <a href="{{ photo.image.url }}" target="_blank"><img src="{{ photo.image.url }}" class="w-full border" alt="Issue photo"></a>
+    {% endfor %}
+  </div>
+  {% if user.role == 'owner' or user.role == 'staff' %}
+  <form method="post" action="{% url 'maintenance:update_status' issue.pk %}" class="bg-white border p-4 space-y-2">
+    {% csrf_token %}{{ status_form.as_p }}
+    <button class="min-h-[44px] px-4 bg-teal-700 text-white">Update status</button>
+  </form>
+  {% endif %}
+  {% if user.role == 'tenant' %}
+  <form method="post" action="{% url 'maintenance:follow_up' issue.pk %}" class="bg-white border p-4 space-y-2">
+    {% csrf_token %}{{ follow_up_form.as_p }}
+    <button class="min-h-[44px] px-4 border">Add follow-up</button>
+  </form>
+  {% endif %}
+  <div class="bg-white border p-4">
+    <h2 class="font-semibold mb-2">Comments</h2>
+    {% for c in issue.comments.all %}
+    <p class="text-sm mb-2"><strong>{{ c.author }}</strong>: {{ c.body }}</p>
+    {% empty %}<p class="text-sm text-slate-500">No comments.</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

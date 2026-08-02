@@ -1,10 +1,82 @@
 {% extends "base.html" %}
-
 {% block title %}Owner Dashboard — Room Revenue Tracker{% endblock %}
-
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
-    <h1 class="text-2xl font-bold text-gray-900 mb-2">Owner Dashboard</h1>
-    <p class="text-gray-600">Welcome, {{ user.get_full_name|default:user.username }}. Property overview will be available in later milestones.</p>
+<div class="space-y-8">
+  <section>
+    <h1 class="text-2xl font-bold mb-4">Owner Dashboard</h1>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="bg-white p-4 border"><p class="text-xs text-slate-500">Rooms</p><p class="text-xl font-semibold">{{ total_rooms }}</p></div>
+      <div class="bg-white p-4 border"><p class="text-xs text-slate-500">Occupied</p><p class="text-xl font-semibold">{{ occupied }}</p></div>
+      <div class="bg-white p-4 border"><p class="text-xs text-slate-500">Vacant</p><p class="text-xl font-semibold">{{ vacant }}</p></div>
+      <div class="bg-white p-4 border"><p class="text-xs text-slate-500">Verified</p><p class="text-xl font-semibold">K{{ verified_revenue }}</p></div>
+      <div class="bg-white p-4 border"><p class="text-xs text-slate-500">Outstanding</p><p class="text-xl font-semibold">K{{ outstanding_revenue }}</p></div>
+      <div class="bg-white p-4 border"><p class="text-xs text-slate-500">Open issues</p><p class="text-xl font-semibold">{{ open_issues }}</p></div>
+    </div>
+  </section>
+
+  <section class="bg-white border p-4">
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="font-semibold">Revenue this month</h2>
+      <a href="{% url 'revenue:pending_queue' %}" class="text-sm text-teal-700 min-h-[44px] inline-flex items-center">
+        Pending queue <span class="ml-2 bg-amber-100 text-amber-900 px-2 py-0.5 rounded">{{ pending_count }}</span>
+      </a>
+    </div>
+    <p class="text-sm text-slate-600 mb-2">Expected K{{ expected_revenue }} / Verified K{{ verified_revenue }} / Outstanding K{{ outstanding_revenue }}</p>
+    <div class="h-3 bg-slate-100 rounded overflow-hidden">
+      <div class="h-full bg-teal-600" style="width: {{ progress_percent }}%"></div>
+    </div>
+  </section>
+
+  <section class="bg-white border p-4">
+    <h2 class="font-semibold mb-3">Per-block revenue</h2>
+    <div class="space-y-3">
+      {% for row in block_breakdown %}
+      <div>
+        <div class="flex justify-between text-sm mb-1"><span>{{ row.block.code }}</span><span>K{{ row.verified }} / K{{ row.expected }}</span></div>
+        <div class="h-2 bg-slate-100 rounded overflow-hidden">
+          {% widthratio row.verified row.expected 100 as pct %}
+          <div class="h-full bg-teal-500" style="width: {% if row.expected %}{{ pct }}{% else %}0{% endif %}%"></div>
+        </div>
+      </div>
+      {% empty %}
+      <p class="text-sm text-slate-500">No blocks yet. Run <code>seed_property</code>.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="bg-white border p-4">
+    <h2 class="font-semibold mb-3">12-month verified revenue</h2>
+    <canvas id="revenueChart" height="100"></canvas>
+  </section>
+
+  <section class="grid md:grid-cols-2 gap-4">
+    <div class="bg-white border p-4">
+      <h2 class="font-semibold mb-2">Recent payments</h2>
+      <ul class="space-y-2 text-sm">
+        {% for p in recent_payments %}
+        <li class="flex justify-between gap-2"><span>{{ p.bed_space.identifier }} — K{{ p.amount }}</span><span class="uppercase text-xs">{{ p.status }}</span></li>
+        {% empty %}<li class="text-slate-500">No payments yet.</li>{% endfor %}
+      </ul>
+    </div>
+    <div class="bg-white border p-4">
+      <h2 class="font-semibold mb-2">Recent issues</h2>
+      <ul class="space-y-2 text-sm">
+        {% for i in recent_issues %}
+        <li class="flex justify-between gap-2"><span>{{ i.bed_space.identifier }} — {{ i.title }}</span><span class="uppercase text-xs">{{ i.status }}</span></li>
+        {% empty %}<li class="text-slate-500">No issues yet.</li>{% endfor %}
+      </ul>
+    </div>
+  </section>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  new Chart(document.getElementById('revenueChart'), {
+    type: 'bar',
+    data: {
+      labels: {{ chart_labels_json|safe }},
+      datasets: [{ label: 'Verified (K)', data: {{ chart_values_json|safe }}, backgroundColor: '#0f766e' }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+</script>
 {% endblock %}

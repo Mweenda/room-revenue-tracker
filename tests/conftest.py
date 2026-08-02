@@ -129,5 +129,10 @@ def bed_space_factory():
 
 
 @pytest.fixture
+def block_factory():
+    return BlockFactory
+
+
+@pytest.fixture
 def tenant_profile_factory():
     return TenantProfileFactory

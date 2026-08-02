@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-
-{% block title %}Staff Dashboard — Room Revenue Tracker{% endblock %}
-
+{% block title %}Staff Dashboard{% endblock %}
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
-    <h1 class="text-2xl font-bold text-gray-900 mb-2">Staff Dashboard</h1>
-    <p class="text-gray-600">Welcome, {{ user.get_full_name|default:user.username }}.</p>
+<h1 class="text-2xl font-bold mb-4">Staff Dashboard</h1>
+<p class="mb-4">Pending payments: {{ pending_count }} · Open issues: {{ open_issues }}</p>
+<div class="flex flex-wrap gap-3">
+  <a class="min-h-[44px] px-4 border bg-white inline-flex items-center" href="{% url 'revenue:pending_queue' %}">Verify payments</a>
+  <a class="min-h-[44px] px-4 border bg-white inline-flex items-center" href="{% url 'maintenance:triage' %}">Triage issues</a>
 </div>
 {% endblock %}

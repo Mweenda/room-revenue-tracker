@@ -1,0 +1,70 @@
+{
+  "blocks": [
+    {
+      "code": "BBH",
+      "name": "BBH",
+      "rooms": [
+        {"number": "01", "capacity": 2},
+        {"number": "02", "capacity": 2},
+        {"number": "03", "capacity": 2},
+        {"number": "04", "capacity": 2},
+        {"number": "05", "capacity": 2},
+        {"number": "06", "capacity": 2},
+        {"number": "07", "capacity": 2},
+        {"number": "08", "capacity": 2},
+        {"number": "09", "capacity": 2},
+        {"number": "10", "capacity": 2},
+        {"number": "11", "capacity": 2},
+        {"number": "12", "capacity": 2}
+      ]
+    },
+    {
+      "code": "NWG",
+      "name": "NWG",
+      "rooms": [
+        {"number": "01", "capacity": 2},
+        {"number": "02", "capacity": 2},
+        {"number": "03", "capacity": 2},
+        {"number": "04", "capacity": 2},
+        {"number": "05", "capacity": 2},
+        {"number": "06", "capacity": 2},
+        {"number": "07", "capacity": 2},
+        {"number": "08", "capacity": 2},
+        {"number": "09", "capacity": 2},
+        {"number": "10", "capacity": 2}
+      ]
+    },
+    {
+      "code": "ANX",
+      "name": "ANX",
+      "rooms": [
+        {"number": "01", "capacity": 2},
+        {"number": "02", "capacity": 2},
+        {"number": "03", "capacity": 2},
+        {"number": "04", "capacity": 2},
+        {"number": "05", "capacity": 2},
+        {"number": "06", "capacity": 2},
+        {"number": "07", "capacity": 2},
+        {"number": "08", "capacity": 2},
+        {"number": "09", "capacity": 2},
+        {"number": "10", "capacity": 2}
+      ]
+    },
+    {
+      "code": "CRV",
+      "name": "CRV",
+      "rooms": [
+        {"number": "01", "capacity": 2},
+        {"number": "02", "capacity": 2},
+        {"number": "03", "capacity": 2},
+        {"number": "04", "capacity": 2},
+        {"number": "05", "capacity": 2},
+        {"number": "06", "capacity": 2},
+        {"number": "07", "capacity": 2},
+        {"number": "08", "capacity": 2},
+        {"number": "09", "capacity": 2},
+        {"number": "10", "capacity": 2}
+      ]
+    }
+  ]
+}

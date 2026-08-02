@@ -1,10 +1,12 @@
-"""Tenant app URL configuration."""
+"""Tenant URL configuration."""
 
 from django.urls import path
-from .views import TenantPortalView
 
-app_name = 'tenants'
+from apps.tenants import views
+
+app_name = "tenants"
 
 urlpatterns = [
-    path('portal/', TenantPortalView.as_view(), name='portal'),
+    path("portal/", views.TenantPortalView.as_view(), name="portal"),
+    path("onboard/", views.TenantOnboardingView.as_view(), name="onboard"),
 ]
