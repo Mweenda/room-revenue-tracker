@@ -21,6 +21,14 @@ Thumbs.db
 # Local agent metadata
 .agents/
 
+# Android / student APK build
+apps/student-apk/.gradle/
+apps/student-apk/build/
+apps/student-apk/app/build/
+apps/student-apk/local.properties
+*.apk
+*.ap_
+
 # Coverage
 coverage/
 .nyc_output/

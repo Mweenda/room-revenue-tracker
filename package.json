@@ -12,7 +12,9 @@
     "deploy:db:direct": "supabase db push --db-url \"$SUPABASE_DB_URL\"",
     "deploy:db:dry-run": "supabase db push --db-url \"$SUPABASE_DB_URL\" --dry-run",
     "deploy:preview": "npm run build && firebase hosting:channel:deploy preview --expires 30d",
-    "deploy:hosting": "npm run build && firebase deploy --only hosting"
+    "deploy:hosting": "npm run build && firebase deploy --only hosting",
+    "build:student-apk": "node scripts/build-student-apk.mjs",
+    "deploy:student-apk": "node scripts/build-student-apk.mjs --upload"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

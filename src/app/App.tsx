@@ -24,7 +24,10 @@ import { Badge, KpiCard, SectionCard, StatusBanner } from "./components/primitiv
 import StudentsView from "./views/StudentsView";
 import ReportsView from "./views/ReportsView";
 import { StudentNotificationsView } from "./views/StudentNotificationsView";
+import { StudentAppDownloadCard } from "./components/StudentAppDownload";
+import { StudentWelcomeAd } from "./components/StudentWelcomeAd";
 import { useStudentInbox } from "../hooks/useStudentInbox";
+import { shouldShowWelcomeAd, studentPortalLaunchParam } from "../lib/studentApp";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
 import type { ApplyRentIncrementResult } from "./components/RentIncrementDialog";
@@ -771,6 +774,8 @@ function StudentSettingsView({ onLogout, email }: { onLogout: () => void; email:
           </div>
         </div>
       </SectionCard>
+
+      <StudentAppDownloadCard />
 
       <SectionCard title="Notifications">
         <div className="p-5 space-y-4">
@@ -1650,6 +1655,7 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
   uploadStudentMedia: (tenantId: string, file: File, category: "receipts" | "maintenance") => Promise<string>;
 }) {
   const [view, setView] = useState<StudentView>("home");
+  const [showWelcomeAd, setShowWelcomeAd] = useState(false);
   const myBed = useMemo(() => {
     const email = currentUser?.email?.trim().toLowerCase();
     const name = currentUser?.name?.trim().toLowerCase();
@@ -1686,6 +1692,10 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
   const [headerVisible, setHeaderVisible] = useState(true);
   const lastScrollY = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setShowWelcomeAd(shouldShowWelcomeAd(student.id));
+  }, [student.id]);
 
   useEffect(() => {
     const el = scrollContainerRef.current;
@@ -1957,6 +1967,14 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
         </div>
       </div>
     </div>
+    {showWelcomeAd && (
+      <StudentWelcomeAd
+        studentId={student.id}
+        studentName={student.name}
+        onDownload={() => setView("settings")}
+        onClose={() => setShowWelcomeAd(false)}
+      />
+    )}
     </ColorModeRoot>
     </ColorModeProvider>
   );
@@ -2261,8 +2279,12 @@ type View = "landing" | "student-login" | "student-confirm" | "student-reset" | 
 function AppRoutes() {
   const [view, setView] = useState<View>(() =>
     (() => {
-      const auth = new URLSearchParams(window.location.search).get("auth");
-      return auth === "student-reset" ? "student-reset" : ["student", "student-confirm"].includes(auth ?? "") ? "student-confirm" : "landing";
+      const params = new URLSearchParams(window.location.search);
+      const auth = params.get("auth");
+      if (auth === "student-reset") return "student-reset";
+      if (auth === "student" || auth === "student-confirm") return "student-confirm";
+      if (studentPortalLaunchParam(window.location.search)) return "student-login";
+      return "landing";
     })(),
   );
   const [currentUser, setCurrentUser] = useState<any>(null);
