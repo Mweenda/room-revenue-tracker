@@ -2,6 +2,7 @@ export { fetchBeds } from "./beds";
 export { fetchBillingRecords } from "./billing";
 export { fetchPayments, submitPayment, verifyPayment, rejectPayment } from "./payments";
 export { fetchIssues, submitIssue, updateIssueStatus } from "./issues";
+export { fetchStudentNotifications, markStudentNotificationRead, ensureRentDueNotification } from "./notifications";
 export { fetchUtilities, upsertUtility, toggleUtilitySettled } from "./utilities";
 export { fetchStudentAccounts, evictTenant, updateStudentAccount } from "./students";
 export type { StudentAccountRow, EvictTenantResult } from "./students";

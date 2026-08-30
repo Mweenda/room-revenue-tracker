@@ -5,8 +5,8 @@ import { Badge as ShadBadge } from "./ui/badge";
 
 /** Shared interactive treatment so every clickable surface reacts the same way. */
 export const HOVER_SURFACE =
-  "transition-all duration-200 hover:shadow-md hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2";
-export const HOVER_ROW = "transition-colors duration-150 hover:bg-slate-50";
+  "transition-all duration-200 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900";
+export const HOVER_ROW = "transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/80";
 
 export function Badge({ label, className }: { label: string; className: string }) {
   return (
@@ -45,9 +45,9 @@ export function SectionCard({ title, children, action, className }: {
   className?: string;
 }) {
   return (
-    <Card className={`gap-0 border-slate-200 shadow-sm overflow-hidden py-0 ${HOVER_SURFACE} ${className ?? ""}`}>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 px-5 py-4 border-b-[1px] border-slate-100">
-        <CardTitle className="text-sm font-bold text-slate-900 uppercase tracking-wide">{title}</CardTitle>
+    <Card className={`gap-0 border-slate-200 dark:border-slate-700 dark:bg-slate-900 shadow-sm overflow-hidden py-0 ${HOVER_SURFACE} ${className ?? ""}`}>
+      <CardHeader className="flex flex-row items-center justify-between gap-3 px-5 py-4 border-b-[1px] border-slate-100 dark:border-slate-800">
+        <CardTitle className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">{title}</CardTitle>
         {action}
       </CardHeader>
       {children}

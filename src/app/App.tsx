@@ -6,7 +6,7 @@ import {
   Settings, LogOut, UserCircle, Camera, EyeOff,
   Bell, Shield, Phone, Mail, MapPin, Calendar,
   Edit3, Save, RefreshCw, HelpCircle, ExternalLink,
-  ChevronDown, Hash, DollarSign, Users, BarChart3,
+  ChevronDown, Hash, DollarSign, Users, BarChart3, Sun, Moon,
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useTrackerData } from "../hooks/useTrackerData";
@@ -17,11 +17,14 @@ import { LandingPage } from "../components/LandingPage";
 import { StudentLogin } from "../components/StudentLogin";
 import { LandlordLogin } from "../components/LandlordLogin";
 import { changeStudentPassword, linkTenantToAuthUser, signOutStudent } from "../lib/auth";
+import { ColorModeProvider, ColorModeRoot, useColorMode } from "../lib/colorMode";
 import { getSupabase } from "../lib/supabase";
 import { Toaster } from "./components/ui/sonner";
 import { Badge, KpiCard, SectionCard, StatusBanner } from "./components/primitives";
 import StudentsView from "./views/StudentsView";
 import ReportsView from "./views/ReportsView";
+import { StudentNotificationsView } from "./views/StudentNotificationsView";
+import { useStudentInbox } from "../hooks/useStudentInbox";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
 import type { ApplyRentIncrementResult } from "./components/RentIncrementDialog";
@@ -61,11 +64,11 @@ type ApplyRentIncrementFn = (input: {
 // ─── Helpers & Constants ─────────────────────────────────────────────────────
 
 const billingStatusStyle: Record<BillingStatus, { bg: string; border: string; dot: string; text: string; badge: string }> = {
-  "Open Window":     { bg: "bg-emerald-50", border: "border-emerald-300", dot: "bg-emerald-500",  text: "text-emerald-800", badge: "bg-emerald-100 text-emerald-800" },
-  "Paid / Secured":  { bg: "bg-blue-50",    border: "border-blue-300",    dot: "bg-blue-500",     text: "text-blue-800",    badge: "bg-blue-100 text-blue-800" },
-  "OVERDUE / UNPAID":{ bg: "bg-red-50",     border: "border-red-300",     dot: "bg-red-500",      text: "text-red-800",     badge: "bg-red-100 text-red-800" },
-  "Grace Period":    { bg: "bg-amber-50",   border: "border-amber-300",   dot: "bg-amber-500",    text: "text-amber-800",   badge: "bg-amber-100 text-amber-800" },
-  "Vacant":          { bg: "bg-slate-50",   border: "border-slate-200",   dot: "bg-slate-400",    text: "text-slate-500",   badge: "bg-slate-100 text-slate-600" },
+  "Open Window":     { bg: "bg-emerald-50 dark:bg-emerald-950/50", border: "border-emerald-300 dark:border-emerald-800", dot: "bg-emerald-500",  text: "text-emerald-800 dark:text-emerald-300", badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200" },
+  "Paid / Secured":  { bg: "bg-blue-50 dark:bg-blue-950/50",    border: "border-blue-300 dark:border-blue-800",    dot: "bg-blue-500",     text: "text-blue-800 dark:text-blue-300",    badge: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+  "OVERDUE / UNPAID":{ bg: "bg-red-50 dark:bg-red-950/50",     border: "border-red-300 dark:border-red-800",     dot: "bg-red-500",      text: "text-red-800 dark:text-red-300",     badge: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+  "Grace Period":    { bg: "bg-amber-50 dark:bg-amber-950/50",   border: "border-amber-300 dark:border-amber-800",   dot: "bg-amber-500",    text: "text-amber-800 dark:text-amber-300",   badge: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
+  "Vacant":          { bg: "bg-slate-50 dark:bg-slate-800/60",   border: "border-slate-200 dark:border-slate-700",   dot: "bg-slate-400",    text: "text-slate-500 dark:text-slate-400",   badge: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
 };
 
 const payStatusStyle: Record<PayStatus, string> = {
@@ -93,12 +96,12 @@ function getInitials(name: string) { return name.split(" ").map((n) => n[0]).joi
 
 function InfoRow({ label, value, icon: Icon, mono }: { label: string; value: string; icon?: React.ElementType; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-      <div className="flex items-center gap-2 text-slate-500 text-sm">
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0 dark:border-slate-800">
+      <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
         {Icon && <Icon size={14} className="shrink-0" />}
         <span>{label}</span>
       </div>
-      <span className={`text-sm font-semibold text-slate-900 ${mono ? "font-mono" : ""}`}>{value}</span>
+      <span className={`text-sm font-semibold text-slate-900 dark:text-slate-100 ${mono ? "font-mono" : ""}`}>{value}</span>
     </div>
   );
 }
@@ -109,7 +112,7 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${checked ? "bg-emerald-600" : "bg-slate-200"}`}
+      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 ${checked ? "bg-emerald-600" : "bg-slate-200 dark:bg-slate-600"}`}
     >
       <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-white shadow transform transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
     </button>
@@ -121,14 +124,14 @@ function Field({ label, value, onChange, placeholder, type = "text", disabled }:
   const isPassword = type === "password";
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}</label>
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">{label}</label>
       <div className="relative">
       <input
         type={isPassword && visible ? "text" : type} value={value} onChange={(e) => onChange?.(e.target.value)} placeholder={placeholder}
         disabled={disabled}
-        className={`w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all min-h-[44px] disabled:bg-slate-50 disabled:text-slate-400 ${isPassword ? "pr-11" : ""}`}
+        className={`w-full border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all min-h-[44px] disabled:bg-slate-50 dark:disabled:bg-slate-800/60 disabled:text-slate-400 ${isPassword ? "pr-11" : ""}`}
       />
-      {isPassword && <button type="button" onClick={() => setVisible((current) => !current)} aria-label={visible ? `Hide ${label}` : `Show ${label}`} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-700"><>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</></button>}
+      {isPassword && <button type="button" onClick={() => setVisible((current) => !current)} aria-label={visible ? `Hide ${label}` : `Show ${label}`} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"><>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</></button>}
       </div>
     </div>
   );
@@ -611,7 +614,7 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
   if (!bed) {
     return (
       <div className="max-w-2xl mx-auto space-y-5 pb-24">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-5 text-sm text-amber-900 dark:text-amber-200">
           <p className="font-bold text-base mb-1">No profile is linked to this account</p>
           <p>Please contact the landlord to assign your room and billing profile.</p>
         </div>
@@ -654,20 +657,20 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
       </div>
 
       {saved && (
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-sm font-medium">
+        <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 px-4 py-3 rounded-xl text-sm font-medium">
           <CheckCircle size={16} /> Profile updated successfully.
         </div>
       )}
-      {saveError && <p className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">{saveError}</p>}
-      {photoError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{photoError}</p>}
+      {saveError && <p className="flex items-center gap-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-xl text-sm font-medium">{saveError}</p>}
+      {photoError && <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">{photoError}</p>}
 
       {billingRecord && (
         <div className={`rounded-xl border-2 ${style.border} ${style.bg} p-5`}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className={`text-xs font-bold uppercase tracking-wider ${style.text} mb-1`}>Current Billing Status</p>
-              <p className="text-lg font-bold text-slate-900">{billingRecord.total_balance === 0 ? "Account Fully Settled" : `Balance Due: ${fmt(billingRecord.total_balance)}`}</p>
-              <p className="text-sm text-slate-500 mt-0.5">Target month: {billingRecord.target_month} · Rent: {fmt(billingRecord.current_rent)}/mo</p>
+              <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{billingRecord.total_balance === 0 ? "Account Fully Settled" : `Balance Due: ${fmt(billingRecord.total_balance)}`}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Target month: {billingRecord.target_month} · Rent: {fmt(billingRecord.current_rent)}/mo</p>
             </div>
             <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${style.badge} shrink-0`}>
               <span className={`w-2 h-2 rounded-full ${style.dot}`} />
@@ -705,6 +708,7 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
 // ─── Student Settings Page ────────────────────────────────────────────────────
 
 function StudentSettingsView({ onLogout, email }: { onLogout: () => void; email: string }) {
+  const { mode, setMode } = useColorMode();
   const [notifs, setNotifs] = useState({ paymentReminders: true, maintenanceUpdates: true, announcements: false });
   const [saved, setSaved] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -725,15 +729,48 @@ function StudentSettingsView({ onLogout, email }: { onLogout: () => void; email:
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-24">
       <div>
-        <h2 className="text-lg font-bold text-slate-900">Settings</h2>
-        <p className="text-sm text-slate-500">Manage your account preferences.</p>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Settings</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Manage your account preferences.</p>
       </div>
 
       {saved && (
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-sm font-medium">
+        <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 px-4 py-3 rounded-xl text-sm font-medium">
           <CheckCircle size={16} /> Settings saved.
         </div>
       )}
+
+      <SectionCard title="Appearance">
+        <div className="p-5">
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Color mode</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Switch the student portal between light and dark.</p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setMode("light")}
+              aria-pressed={mode === "light"}
+              className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border transition-all duration-150 min-h-[44px] ${
+                mode === "light"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              }`}
+            >
+              <Sun size={16} /> Light
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("dark")}
+              aria-pressed={mode === "dark"}
+              className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border transition-all duration-150 min-h-[44px] ${
+                mode === "dark"
+                  ? "border-emerald-500 bg-emerald-950 text-emerald-200"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              }`}
+            >
+              <Moon size={16} /> Dark
+            </button>
+          </div>
+        </div>
+      </SectionCard>
 
       <SectionCard title="Notifications">
         <div className="p-5 space-y-4">
@@ -744,8 +781,8 @@ function StudentSettingsView({ onLogout, email }: { onLogout: () => void; email:
           ].map(({ key, label, desc }) => (
             <div key={key} className="flex items-start justify-between gap-4 py-1.5">
               <div>
-                <p className="text-sm font-semibold text-slate-900">{label}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{label}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{desc}</p>
               </div>
               <ToggleSwitch checked={notifs[key]} onChange={(v) => setNotifs((n) => ({ ...n, [key]: v }))} />
             </div>
@@ -760,8 +797,8 @@ function StudentSettingsView({ onLogout, email }: { onLogout: () => void; email:
         <div className="p-5 space-y-4">
           <Field label="Current Password" value={currentPassword} onChange={setCurrentPassword} placeholder="Your current password" type="password" />
           <Field label="New Password" value={newPassword} onChange={setNewPassword} placeholder="At least 8 characters" type="password" />
-          {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
-          {passwordSaved && <p className="text-sm text-emerald-700">Password updated successfully for {email}.</p>}
+          {passwordError && <p className="text-sm text-red-600 dark:text-red-400">{passwordError}</p>}
+          {passwordSaved && <p className="text-sm text-emerald-700 dark:text-emerald-400">Password updated successfully for {email}.</p>}
           <button onClick={() => void handlePasswordChange()} disabled={!currentPassword || !newPassword} className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white rounded-lg text-sm font-semibold transition-colors duration-150">
             <Shield size={15} /> Update Password
           </button>
@@ -775,19 +812,19 @@ function StudentSettingsView({ onLogout, email }: { onLogout: () => void; email:
             { icon: Mail,          label: "Contact Management", desc: "Email your property manager" },
             { icon: ExternalLink,  label: "Terms & Privacy",    desc: "Review our policies" },
           ].map(({ icon: Icon, label, desc }) => (
-            <button key={label} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-50 text-left group transition-colors duration-150">
-              <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-slate-200 transition-colors"><Icon size={16} className="text-slate-600" /></div>
+            <button key={label} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-left group transition-colors duration-150">
+              <div className="w-9 h-9 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-slate-200 dark:group-hover:bg-slate-700 transition-colors"><Icon size={16} className="text-slate-600 dark:text-slate-300" /></div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-900">{label}</p>
-                <p className="text-xs text-slate-500">{desc}</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{label}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{desc}</p>
               </div>
-              <ChevronRight size={15} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+              <ChevronRight size={15} className="text-slate-300 dark:text-slate-600 group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors" />
             </button>
           ))}
         </div>
       </SectionCard>
 
-      <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 py-3 border-2 border-red-100 text-red-500 hover:bg-red-50 hover:border-red-200 rounded-xl text-sm font-semibold transition-all duration-150">
+      <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 py-3 border-2 border-red-100 dark:border-red-900/60 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:border-red-200 dark:hover:border-red-800 rounded-xl text-sm font-semibold transition-all duration-150">
         <LogOut size={16} /> Sign Out
       </button>
     </div>
@@ -1598,10 +1635,11 @@ function UtilitiesView({ utilities, beds, saveUtility, toggleSettled }: {
 
 // ─── Student Portal ───────────────────────────────────────────────────────────
 
-function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogout, submitPay, submitMaint, updateStudent, uploadStudentProfilePhoto, uploadStudentMedia }: {
+function StudentPortal({ beds, payments, issues, utilities, billingMap, currentUser, onLogout, submitPay, submitMaint, updateStudent, uploadStudentProfilePhoto, uploadStudentMedia }: {
   beds: BedSpace[];
   payments: Payment[];
   issues: MaintenanceIssue[];
+  utilities: UtilityBlock[];
   billingMap: Map<string, BillingRecord>;
   currentUser?: { id?: string; name?: string; email?: string; phone?: string; nrc?: string; moveInDate?: string } | null;
   onLogout: () => void;
@@ -1702,16 +1740,30 @@ function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogo
   const bStatus = billingRec?.billing_status ?? "Open Window";
   const bStyle = billingStatusStyle[bStatus];
   const pendingPayments = myPayments.filter((p) => p.status === "pending");
+  const myIssues = myBed ? issues.filter((issue) => issue.bedSpaceId === myBed.id) : [];
+  const myUtilities = myBed ? utilities : [];
+  const inbox = useStudentInbox({
+    tenantId: myBed?.student?.id ?? (currentUser?.id && currentUser.id !== "guest-student" ? currentUser.id : undefined),
+    bedId: myBed?.id,
+    blockCode: myBed?.blockCode,
+    billing: billingRec,
+    payments: myPayments,
+    issues: myIssues,
+    utilities: myUtilities,
+  });
 
   const navTabs: { id: StudentView; label: string; icon: React.ElementType }[] = [
-    { id: "home",     label: "Home",     icon: Home },
-    { id: "profile",  label: "Profile",  icon: UserCircle },
-    { id: "settings", label: "Settings", icon: Settings },
+    { id: "home",          label: "Home",     icon: Home },
+    { id: "notifications", label: "Inbox",    icon: Bell },
+    { id: "profile",       label: "Profile",  icon: UserCircle },
+    { id: "settings",      label: "Settings", icon: Settings },
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50 overflow-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <div className={`bg-slate-900 z-30 transition-transform duration-300 ease-in-out shrink-0 ${headerVisible ? "translate-y-0" : "-translate-y-full"}`}>
+    <ColorModeProvider>
+    <ColorModeRoot>
+    <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div className={`bg-slate-900 dark:bg-black z-30 transition-transform duration-300 ease-in-out shrink-0 ${headerVisible ? "translate-y-0" : "-translate-y-full"}`}>
         <div className="max-w-2xl mx-auto px-4 pt-4 pb-5">
           <div className="flex items-center mb-4">
             <div className="flex items-center gap-2">
@@ -1731,6 +1783,12 @@ function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogo
               </span>
             </div>
           )}
+          {view === "notifications" && (
+            <div>
+              <p className="text-emerald-400 text-xs font-semibold uppercase tracking-wider">Messages</p>
+              <h1 className="text-xl font-bold text-white mt-1">{inbox.selected ? inbox.selected.title : "Inbox"}</h1>
+            </div>
+          )}
           {view === "profile" && <h1 className="text-xl font-bold text-white">My Profile</h1>}
           {view === "settings" && <h1 className="text-xl font-bold text-white">Settings</h1>}
         </div>
@@ -1741,7 +1799,7 @@ function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogo
         {view === "home" && (
           <div className="space-y-5">
             {!myBed ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+              <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-5 text-sm text-amber-900 dark:text-amber-200">
                 <p className="font-bold text-base mb-1">No bed assignment found</p>
                 <p>This account is not linked to a residential bedspace yet. Please contact the landlord to assign your room and billing profile.</p>
               </div>
@@ -1751,31 +1809,31 @@ function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogo
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className={`text-xs font-bold uppercase tracking-wider ${bStyle.text} mb-1`}>Billing — {formatBillingPeriodLabel(billingRec?.target_month)}</p>
-                      <p className="text-lg font-bold text-slate-900">{billingRec?.total_balance === 0 ? "Account fully settled" : `Balance: ${fmt(billingRec?.total_balance ?? 0)}`}</p>
-                      <p className="text-sm text-slate-500 mt-0.5">Monthly rent: {fmt(myBed.rentAmount)}</p>
+                      <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{billingRec?.total_balance === 0 ? "Account fully settled" : `Balance: ${fmt(billingRec?.total_balance ?? 0)}`}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Monthly rent: {fmt(myBed.rentAmount)}</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-shadow">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">Bed Space</p>
-                    <p className="text-lg font-bold text-slate-900 mt-1 font-mono">{myBed.identifier}</p>
+                  <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:shadow-md transition-shadow">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Bed Space</p>
+                    <p className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-1 font-mono">{myBed.identifier}</p>
                     <p className="text-xs text-slate-400">{myBed.blockCode} Block · Room {myBed.roomNumber}</p>
                   </div>
-                  <div className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-shadow">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">Monthly Rent</p>
-                    <p className="text-lg font-bold text-emerald-700 mt-1">{fmt(myBed.rentAmount)}</p>
+                  <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:shadow-md transition-shadow">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Monthly Rent</p>
+                    <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-1">{fmt(myBed.rentAmount)}</p>
                     <p className="text-xs text-slate-400">Due {formatBillingPeriodLabel(billingRec?.target_month)}</p>
                   </div>
                 </div>
 
                 {pendingPayments.length > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                  <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
                     <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-semibold text-amber-900">{pendingPayments.length} payment{pendingPayments.length > 1 ? "s" : ""} awaiting verification</p>
-                      <p className="text-xs text-amber-700 mt-0.5">Your landlord will verify your submission shortly.</p>
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">{pendingPayments.length} payment{pendingPayments.length > 1 ? "s" : ""} awaiting verification</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Your landlord will verify your submission shortly.</p>
                     </div>
                   </div>
                 )}
@@ -1783,16 +1841,16 @@ function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogo
                 <SectionCard title="Payment History">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm min-w-[360px]">
-                      <thead className="bg-slate-50 border-b border-slate-100 text-[11px] text-slate-500 uppercase tracking-wide">
+                      <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                         <tr><th className="text-left px-5 py-3 font-semibold">Date</th><th className="text-left px-5 py-3 font-semibold hidden sm:table-cell">Method</th><th className="text-right px-5 py-3 font-semibold">Amount</th><th className="text-left px-5 py-3 font-semibold">Status</th></tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {myPayments.length === 0 ? <tr><td colSpan={4} className="px-5 py-8 text-center text-slate-400">No payment records yet.</td></tr>
                           : myPayments.map((p) => (
-                            <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="px-5 py-3 text-slate-700 text-xs">{p.submittedAt}</td>
-                              <td className="px-5 py-3 font-bold text-xs hidden sm:table-cell">{p.method}</td>
-                              <td className="px-5 py-3 text-right font-bold text-slate-900">{fmt(p.amount)}</td>
+                            <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                              <td className="px-5 py-3 text-slate-700 dark:text-slate-300 text-xs">{p.submittedAt}</td>
+                              <td className="px-5 py-3 font-bold text-xs hidden sm:table-cell dark:text-slate-200">{p.method}</td>
+                              <td className="px-5 py-3 text-right font-bold text-slate-900 dark:text-slate-100">{fmt(p.amount)}</td>
                               <td className="px-5 py-3"><Badge label={p.status.charAt(0).toUpperCase() + p.status.slice(1)} className={payStatusStyle[p.status]} /></td>
                             </tr>
                           ))}
@@ -1805,11 +1863,11 @@ function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogo
                   <div className="p-5 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Method</label>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Method</label>
                         <div className="flex gap-2">
                           {(["Airtel", "MTN"] as const).map((m) => (
                             <button key={m} onClick={() => setPayForm((f) => ({ ...f, method: m }))}
-                              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all duration-150 min-h-[44px] hover:shadow-sm ${payForm.method === m ? (m === "Airtel" ? "bg-red-600 text-white shadow-sm" : "bg-yellow-400 text-yellow-900 shadow-sm") : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all duration-150 min-h-[44px] hover:shadow-sm ${payForm.method === m ? (m === "Airtel" ? "bg-red-600 text-white shadow-sm" : "bg-yellow-400 text-yellow-900 shadow-sm") : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"}`}>
                               {m}
                             </button>
                           ))}
@@ -1818,9 +1876,9 @@ function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogo
                       <Field label="Amount (K)" value={payForm.amount} onChange={(v) => setPayForm((f) => ({ ...f, amount: v }))} type="number" />
                     </div>
                     <Field label="Transaction Reference *" value={payForm.ref} onChange={(v) => setPayForm((f) => ({ ...f, ref: v }))} placeholder="TXN-AIRTL-0000" />
-                    <div onClick={() => payFileRef.current?.click()} className="border-2 border-dashed border-slate-200 rounded-xl p-5 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 transition-all duration-150 group">
+                    <div onClick={() => payFileRef.current?.click()} className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-5 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30 transition-all duration-150 group">
                       <Upload size={20} className="mx-auto text-slate-400 mb-1 group-hover:text-emerald-500 transition-colors" />
-                      <p className="text-xs text-slate-500 group-hover:text-emerald-600">{payFileName || "Click to upload receipt (JPEG/PNG)"}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-emerald-600">{payFileName || "Click to upload receipt (JPEG/PNG)"}</p>
                       <input ref={payFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) { setPayFile(file); setPayFileName(file.name); } }} />
                     </div>
                     <button onClick={submitPayment} disabled={!payForm.ref}
@@ -1835,24 +1893,24 @@ function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogo
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {(["Plumbing", "Electrical", "Structural", "Appliance"] as IssueCategory[]).map((c) => (
                         <button key={c} onClick={() => setMainForm((f) => ({ ...f, category: c }))}
-                          className={`py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 min-h-[40px] hover:shadow-sm ${mainForm.category === c ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                          className={`py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 min-h-[40px] hover:shadow-sm ${mainForm.category === c ? "bg-slate-900 text-white shadow-sm dark:bg-emerald-600" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"}`}>
                           {categoryIcon[c]} {c}
                         </button>
                       ))}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Description *</label>
-                      <textarea rows={3} value={mainForm.description} onChange={(e) => setMainForm((f) => ({ ...f, description: e.target.value }))} placeholder="Describe the issue — location, severity, when it started…" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none transition-all" />
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Description *</label>
+                      <textarea rows={3} value={mainForm.description} onChange={(e) => setMainForm((f) => ({ ...f, description: e.target.value }))} placeholder="Describe the issue — location, severity, when it started…" className="w-full border border-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none transition-all" />
                     </div>
                     {mainImagePreview ? (
-                      <div className="relative rounded-xl overflow-hidden border border-slate-200 h-36">
+                      <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 h-36">
                         <img src={mainImagePreview} alt="Damage preview" className="w-full h-full object-cover" />
                         <button onClick={() => { setMainImagePreview(null); setMainImageUrl(undefined); }} className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-colors"><X size={13} /></button>
                       </div>
                     ) : (
-                      <div onClick={() => mainFileRef.current?.click()} className="border-2 border-dashed border-slate-200 rounded-xl p-5 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 transition-all duration-150 group">
+                      <div onClick={() => mainFileRef.current?.click()} className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-5 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30 transition-all duration-150 group">
                         <Camera size={18} className="mx-auto text-slate-400 mb-1 group-hover:text-emerald-500 transition-colors" />
-                        <p className="text-xs text-slate-500 group-hover:text-emerald-600">Upload damage photo</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-emerald-600">Upload damage photo</p>
                       </div>
                     )}
                     <input ref={mainFileRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
@@ -1867,22 +1925,40 @@ function StudentPortal({ beds, payments, issues, billingMap, currentUser, onLogo
           </div>
         )}
 
+        {view === "notifications" && (
+          <StudentNotificationsView
+            items={inbox.items}
+            selected={inbox.selected}
+            loading={inbox.loading}
+            onOpen={inbox.open}
+            onBack={inbox.close}
+          />
+        )}
         {view === "profile" && <StudentProfileView bed={myBed} billingRecord={billingRec} onSave={updateStudent} onPhotoUpload={uploadStudentProfilePhoto} />}
         {view === "settings" && <StudentSettingsView onLogout={onLogout} email={student.email} />}
       </div>
       </div>
 
-      <div className="bg-white/95 backdrop-blur-sm border-t border-slate-200 px-4 pb-safe z-30 shrink-0">
+      <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-t border-slate-200 dark:border-slate-800 px-4 pb-safe z-30 shrink-0">
         <div className="max-w-2xl mx-auto flex">
           {navTabs.map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => setView(id)} className={`flex-1 flex flex-col items-center gap-1 py-3 transition-all duration-150 ${view === id ? "text-emerald-600" : "text-slate-400 hover:text-slate-600"}`}>
-              <Icon size={20} className="transition-transform duration-150" style={{ transform: view === id ? "scale(1.1)" : "scale(1)" }} />
+            <button key={id} onClick={() => { setView(id); inbox.close(); }} className={`flex-1 flex flex-col items-center gap-1 py-3 transition-all duration-150 ${view === id ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}>
+              <span className="relative">
+                <Icon size={20} className="transition-transform duration-150" style={{ transform: view === id ? "scale(1.1)" : "scale(1)" }} />
+                {id === "notifications" && inbox.unread > 0 && (
+                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 text-white text-[9px] font-bold leading-4 text-center">
+                    {inbox.unread > 9 ? "9+" : inbox.unread}
+                  </span>
+                )}
+              </span>
               <span className="text-[11px] font-semibold">{label}</span>
             </button>
           ))}
         </div>
       </div>
     </div>
+    </ColorModeRoot>
+    </ColorModeProvider>
   );
 }
 
@@ -2264,6 +2340,7 @@ function AppRoutes() {
         beds={tracker.beds}
         payments={tracker.payments}
         issues={tracker.issues}
+        utilities={tracker.utilities}
         billingMap={tracker.billingMap}
         currentUser={currentUser}
         onLogout={handleLogout}

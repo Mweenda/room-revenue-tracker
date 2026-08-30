@@ -673,6 +673,14 @@ export function useTrackerData() {
       if (source === "supabase") {
         const updated = await api.updateIssueStatus(id, status, resolutionNote);
         setIssues((prev) => prev.map((i) => (i.id === id ? updated : i)));
+        const bed = beds.find((item) => item.id === updated.bedSpaceId);
+        if (bed?.student?.id) {
+          await sendTenantNotification({
+            tenantId: bed.student.id,
+            type: "maintenance_update",
+            details: { bedSpace: updated.bedSpaceId },
+          });
+        }
         return;
       }
       setIssues((prev) =>
@@ -681,7 +689,7 @@ export function useTrackerData() {
         ),
       );
     },
-    [source],
+    [source, beds],
   );
 
   const saveUtility = useCallback(
