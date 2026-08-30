@@ -87,15 +87,6 @@ If login says the tenant profile is missing, the landlord must re-onboard using 
 
 The UI will load beds, billing, payments, utilities, and maintenance from Supabase. Mutations (onboard, verify/reject payments, utility entries, issues) persist to the database.
 
-### Demo accounts
-
-These are real Supabase Auth users (confirmed emails, linked to the landlord profile and to Chanda Lutashima’s tenant row). Enter them on the login screens — they are not pre-filled.
-
-| Portal | Email | Password |
-| --- | --- | --- |
-| Landlord | `mwamba.property@gmail.com` | `Admin12345` |
-| Student | `chanda.student@gmail.com` | `Student12345` |
-
 ## Landlord features
 
 ### Students page
