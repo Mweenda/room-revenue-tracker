@@ -10,10 +10,26 @@ permissions:
   pull-requests: write
 
 jobs:
-  hosting:
+  decide:
     runs-on: ubuntu-latest
-    # Skip quietly until a Firebase service account is stored as a repo secret.
-    if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    outputs:
+      has_secret: ${{ steps.check.outputs.has_secret }}
+    steps:
+      - id: check
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$SA" ]; then
+            echo "has_secret=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_secret=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Firebase deploy: FIREBASE_SERVICE_ACCOUNT is not set."
+          fi
+
+  hosting:
+    needs: decide
+    if: needs.decide.outputs.has_secret == 'true'
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4

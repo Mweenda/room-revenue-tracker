@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "test": "node --import tsx --test tests/",
+    "test": "node --import tsx --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "deploy:db": "supabase db push --linked",
     "deploy:db:direct": "supabase db push --db-url \"$SUPABASE_DB_URL\"",
