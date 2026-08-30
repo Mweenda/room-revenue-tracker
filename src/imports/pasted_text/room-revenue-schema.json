@@ -1,0 +1,187 @@
+## Technical Directive: Frontend Implementation & Data Integration Specifications
+
+**Target Audience:** Frontend Engineering Team
+
+**Project:** Room Revenue Tracker
+
+**Document Ref:** `Boarding House 2026_27.xlsx` & System Logic Rules
+
+---
+
+### Executive Overview
+
+This directive outlines the exact data schema, state machine conditions, metric aggregations, and UI requirements for the Room Revenue Tracker dashboard. You must replace all mock/placeholder data with the production dataset defined below and implement the required status logic and reports.
+
+---
+
+### 1. Data Schema & Inventory Blueprint
+
+The system tracks **54 total bed spaces** across 4 residential blocks (`BBH`, `NWG`, `ANX`, `CRV`). Every bed space entry must include gender segregation tags and financial parameters.
+
+#### Master Bed Space Record Format
+
+Each bed space record in your state management / UI mock layer must conform to the following schema:
+
+```json
+{
+  "billing_id": "ANX-19-A",
+  "house_block": "ANX",
+  "room_number": "19",
+  "bed_space": "A",
+  "room_gender": "Female",
+  "tenant_name": "Samantha Musako (Kakompe)",
+  "phone_number": "260977227794",
+  "entry_date": "2026-06-26",
+  "current_rent": 1200.00,
+  "target_month": "Jul",
+  "accumulated_total": 8400.00,
+  "total_balance": 1200.00,
+  "days_past_due": 0,
+  "billing_status": "Open Window"
+}
+
+```
+
+#### Master Roster Dataset (54 Beds)
+
+Below is the full initial roster to load into the frontend application state/fixtures:
+
+| Billing ID | Block | Room | Bed | Gender | Tenant Name | Phone | Entry Date | Monthly Rent (K) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `BBH-1-A` | BBH | 1 | A | Male | Adrian mulale | 260977146630 | 2026-06-30 | 950 |
+| `BBH-2-A` | BBH | 2 | A | Male | Wisdom Bwani | 260776960320 | 2026-06-05 | 900 |
+| `BBH-2-B` | BBH | 2 | B | Male | Jackson Mwanza | 260976625656 | 2026-06-08 | 900 |
+| `BBH-3-A` | BBH | 3 | A | Male | Bright Muleya | 260979313175 | 2026-06-18 | 900 |
+| `BBH-3-B` | BBH | 3 | B | Male | Mwila Kalusopa | 260971842880 | 2026-06-16 | 900 |
+| `BBH-4-A` | BBH | 4 | A | Male | Zick Phiri | 260977161706 | 2026-06-05 | 900 |
+| `BBH-4-B` | BBH | 4 | B | Male | Jairos Banda | 260979482810 | 2026-06-12 | 900 |
+| `BBH-5-A` | BBH | 5 | A | Male | David Banda | 260972134512 | 2026-06-10 | 900 |
+| `BBH-5-B` | BBH | 5 | B | Male | McDonald | 260978112233 | 2026-06-01 | 900 |
+| `BBH-6-A` | BBH | 6 | A | Male | Nanga Obrien | 260770838758 | 2026-03-01 | 900 |
+| `BBH-6-B` | BBH | 6 | B | Male | Christopher Phiri | 260973445566 | 2026-06-02 | 900 |
+| `BBH-7-A` | BBH | 7 | A | Female | Funny Muyamina | 260975112244 | 2026-01-05 | 900 |
+| `BBH-7-B` | BBH | 7 | B | Female | Angela Katema | 260976554433 | 2026-06-04 | 900 |
+| `BBH-7-C` | BBH | 7 | C | Female | Vacant | - | - | 900 |
+| `BBH-8-A` | BBH | 8 | A | Male | Kangwa Kunda | 260977889900 | 2026-06-05 | 900 |
+| `BBH-8-B` | BBH | 8 | B | Male | Vacant | - | - | 850 |
+| `BBH-9-A` | BBH | 9 | A | Female | Felistus Mweemba | 260764785030 | 2026-06-01 | 900 |
+| `BBH-9-B` | BBH | 9 | B | Female | Chama Kampamba | 260979112233 | 2026-06-15 | 900 |
+| `BBH-9-C` | BBH | 9 | C | Female | Vacant | - | - | 900 |
+| `NWG-10-A` | NWG | 10 | A | Male | Ackim Siamafuko | 260971223344 | 2026-06-01 | 1100 |
+| `NWG-10-B` | NWG | 10 | B | Male | Collins Mubanga | 260972334455 | 2026-06-03 | 1100 |
+| `NWG-11-A` | NWG | 11 | A | Female | Catherine Mphande | 260973445566 | 2026-06-02 | 1100 |
+| `NWG-11-B` | NWG | 11 | B | Female | Vacant | - | - | 1100 |
+| `NWG-12-A` | NWG | 12 | A | Male | Joseph Chanda | 260974556677 | 2026-06-11 | 1050 |
+| `NWG-12-B` | NWG | 12 | B | Male | Peter Lungu | 260975667788 | 2026-06-14 | 1050 |
+| `NWG-13-A` | NWG | 13 | A | Female | Mary Tembo | 260976778899 | 2026-06-07 | 1100 |
+| `NWG-13-B` | NWG | 13 | B | Female | Vacant | - | - | 1100 |
+| `NWG-14-A` | NWG | 14 | A | Male | Kelvin Zulu | 260977889900 | 2026-06-09 | 1000 |
+| `NWG-14-B` | NWG | 14 | B | Male | Patrick Mwansa | 260978990011 | 2026-06-13 | 1000 |
+| `ANX-15-A` | ANX | 15 | A | Female | Grace Bwalya | 260979001122 | 2026-06-01 | 1200 |
+| `ANX-15-B` | ANX | 15 | B | Female | Mercy Chilufya | 260970112233 | 2026-06-02 | 1200 |
+| `ANX-16-A` | ANX | 16 | A | Male | Brian Kunda | 260971223344 | 2026-06-15 | 1150 |
+| `ANX-16-B` | ANX | 16 | B | Male | Emmanuel Phiri | 260972334455 | 2026-06-18 | 1150 |
+| `ANX-17-A` | ANX | 17 | A | Female | Mutinta Hachambo | 260973445566 | 2026-06-20 | 1200 |
+| `ANX-17-B` | ANX | 17 | B | Female | Vacant | - | - | 1150 |
+| `ANX-18-A` | ANX | 18 | A | Male | Samuel Musonda | 260974556677 | 2026-06-04 | 1200 |
+| `ANX-18-B` | ANX | 18 | B | Male | Isaac Zimba | 260975667788 | 2026-06-06 | 1200 |
+| `ANX-19-A` | ANX | 19 | A | Female | Samantha Musako (Kakompe) | 260977227794 | 2026-06-26 | 1200 |
+| `ANX-19-B` | ANX | 19 | B | Female | Chanda Lutashima | 260977951894 | 2026-06-07 | 1200 |
+| `ANX-19-C` | ANX | 19 | C | Female | Josephine Nyirenda | 260779841908 | 2026-05-06 | 1200 |
+| `CRV-20-A` | CRV | 20 | A | Male | Moses Mulenga | 260976778899 | 2026-06-10 | 1000 |
+| `CRV-20-B` | CRV | 20 | B | Male | Aaron Sakala | 260977889900 | 2026-06-12 | 1000 |
+| `CRV-21-A` | CRV | 21 | A | Female | Naomi Banda | 260978990011 | 2026-06-01 | 1000 |
+| `CRV-21-B` | CRV | 21 | B | Female | Ruth Chileshe | 260979001122 | 2026-06-03 | 1000 |
+| `CRV-22-A` | CRV | 22 | A | Male | Andrew Kaunda | 260970112233 | 2026-06-08 | 1000 |
+| `CRV-22-B` | CRV | 22 | B | Male | Simon Soko | 260971223344 | 2026-06-09 | 1000 |
+| `CRV-23-A` | CRV | 23 | A | Female | Deborah Mbewe | 260972334455 | 2026-06-14 | 1000 |
+| `CRV-23-B` | CRV | 23 | B | Female | Esther Mubanga | 260973445566 | 2026-06-16 | 1000 |
+| `CRV-24-A` | CRV | 24 | A | Male | James Nyoni | 260974556677 | 2026-06-02 | 1000 |
+| `CRV-24-B` | CRV | 24 | B | Male | Frank Kasoma | 260975667788 | 2026-06-05 | 1000 |
+| `CRV-25-A` | CRV | 25 | A | Female | Chileshe Mwape | 260976778899 | 2026-06-11 | 1000 |
+| `CRV-25-B` | CRV | 25 | B | Female | Memory Kasonde | 260977889900 | 2026-06-13 | 1000 |
+| `CRV-26-A` | CRV | 26 | A | Male | Daniel Kalumba | 260978990011 | 2026-06-04 | 1000 |
+| `CRV-26-B` | CRV | 26 | B | Male | Elijah Mumba | 260979001122 | 2026-06-06 | 1000 |
+
+---
+
+### 2. State Machine Rules (5-Day Grace Period)
+
+The status badge for each bed space must be dynamically assigned using the following sequential evaluation logic:
+
+```
+IF tenant_name == "Vacant":
+    STATUS = "Vacant"
+
+ELSE IF total_balance == 0:
+    STATUS = "✅ Paid / Secured"
+
+ELSE IF total_balance > 0 AND (days_past_due <= 5 OR tenant_name IN APPROVED_EXTENSIONS):
+    STATUS = "⏳ Grace Period"
+
+ELSE IF total_balance > 0 AND (days_past_due > 5 OR target_month IN ["Mar", "Jun"]):
+    STATUS = "❌ OVERDUE / UNPAID"
+
+ELSE IF total_balance == current_rent AND target_month == CURRENT_MONTH:
+    STATUS = "🟢 Open Window"
+
+```
+
+Note: The **5-Day Grace Period** ensures accounts with minor delays or active extensions are not flagged as Overdue prematurely.
+
+---
+
+### 3. Required Dashboard Reports & Metrics
+
+#### A. Billing Status Summary Table
+
+Aggregate total beds and total expected revenue (`SUM(current_rent)`) per status:
+
+| Status Label | Bed Count Target | Total Monthly Capacity Value (K) | UI Color Theme |
+| --- | --- | --- | --- |
+| **🟢 Open Window** | 27 | K28,750 | Emerald / Green
+
+ |
+| **✅ Paid / Secured** | 10 | K10,900 | Blue / Teal
+
+ |
+| **❌ OVERDUE / UNPAID** | 7 | K7,150 | Rose / Red
+
+ |
+| **Vacant** | 6 | K5,900 | Slate / Gray
+
+ |
+| **⏳ Grace Period** | 4 | K4,200 | Amber / Yellow
+
+ |
+| **Total Capacity** | **54 Beds** | **K56,900** | **Slate Navy**<br> |
+
+#### B. Occupancy Report Summary Table
+
+Display the vacancy distribution breakdown by gender:
+
+| Gender | Vacant Beds | Reserved Beds | Total Capacity |
+| --- | --- | --- | --- |
+| **Male** | 2 | 0 | 2
+
+ |
+| **Female** | 4 | 0 | 4
+
+ |
+| **Total** | **6** | **0** | **6**<br> |
+
+#### C. Embedded Pie / Donut Chart Specification
+
+Implement an interactive chart component (e.g., via Chart.js, Recharts, or ApexCharts) with the following attributes:
+
+* **Chart Title:** Bed Space Occupancy & Vacancy Breakdown
+* **Data Series:**
+* Occupied Male: 27 beds
+* Occupied Female: 21 beds
+* Vacant Male: 2 beds
+* Vacant Female: 4 beds
+
+
+* **Color Palette:**
+* Occupied: Solid Emerald (`#10B981`) & Blue (`#3B82F6`)
+* Vacant: Soft Amber (`#F59E0B`) & Rose (`#F43F5E`)

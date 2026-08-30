@@ -1,0 +1,27 @@
+# Dependencies and build
+node_modules/
+dist/
+.firebase/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+supabase/functions/.env
+supabase/.temp/
+
+# Logs / OS / editors
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.cursor/
+
+# Local agent metadata
+.agents/
+
+# Coverage
+coverage/
+.nyc_output/
+.claude/

@@ -1,0 +1,8 @@
+project_id = "knxsnccrkqkosjbgzckv"
+
+# OPTIONS preflight has no JWT. The platform verify_jwt gate would 401 it
+# before the function can return CORS headers, which is what blocked
+# localhost:5173. POST still requires a user JWT via verifyAuth({ auth: "user" })
+# plus the is_landlord RPC.
+[functions.send-email]
+verify_jwt = false
