@@ -33,12 +33,12 @@ export function LandlordLogin({ onBack, onLoginSuccess }: LandlordLoginProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-900 to-teal-900 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-dvh h-dvh max-h-dvh overflow-y-auto bg-gradient-to-br from-slate-900 via-emerald-900 to-teal-900 flex items-center justify-center p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] relative">
       {/* Decorative background elements */}
-      <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+      <div className="pointer-events-none absolute top-0 left-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+      <div className="pointer-events-none absolute bottom-0 right-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
       
-      <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl w-full max-w-md p-8 border border-white/20 relative z-10">
+      <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl w-full max-w-md my-auto p-6 sm:p-8 border border-white/20 relative z-10">
         <button
           onClick={onBack}
           className="flex items-center gap-2 text-slate-300 hover:text-white mb-6 transition-colors"

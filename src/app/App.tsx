@@ -16,7 +16,9 @@ import { isBedAssignable, type OccupancyIssue } from "../lib/occupancy";
 import { LandingPage } from "../components/LandingPage";
 import { StudentLogin } from "../components/StudentLogin";
 import { LandlordLogin } from "../components/LandlordLogin";
-import { changeStudentPassword, linkTenantToAuthUser, signOutStudent } from "../lib/auth";
+import { AdminLogin } from "../components/AdminLogin";
+import { AdminDashboard } from "../components/AdminDashboard";
+import { adminSignOut, changeStudentPassword, linkTenantToAuthUser, signOutStudent } from "../lib/auth";
 import { ColorModeProvider, ColorModeRoot, useColorMode } from "../lib/colorMode";
 import { getSupabase } from "../lib/supabase";
 import { Toaster } from "./components/ui/sonner";
@@ -25,9 +27,13 @@ import StudentsView from "./views/StudentsView";
 import ReportsView from "./views/ReportsView";
 import { StudentNotificationsView } from "./views/StudentNotificationsView";
 import { StudentAppDownloadCard } from "./components/StudentAppDownload";
+import { StudentCollapsingHeader } from "./components/StudentCollapsingHeader";
+import { StudentPortalNav } from "./components/StudentPortalNav";
 import { StudentWelcomeAd } from "./components/StudentWelcomeAd";
 import { useStudentInbox } from "../hooks/useStudentInbox";
-import { shouldShowWelcomeAd, studentPortalLaunchParam } from "../lib/studentApp";
+import { isStudentNativeShell, shouldShowWelcomeAd } from "../lib/studentApp";
+import { compactTitleVisible, headerCollapseProgress } from "../lib/studentPortalHeader";
+import { useStudentViewport } from "../hooks/useStudentViewport";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
 import type { ApplyRentIncrementResult } from "./components/RentIncrementDialog";
@@ -616,7 +622,7 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
 
   if (!bed) {
     return (
-      <div className="max-w-2xl mx-auto space-y-5 pb-24">
+      <div className="max-w-2xl mx-auto space-y-5 pb-2">
         <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-5 text-sm text-amber-900 dark:text-amber-200">
           <p className="font-bold text-base mb-1">No profile is linked to this account</p>
           <p>Please contact the landlord to assign your room and billing profile.</p>
@@ -626,7 +632,7 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 pb-24">
+    <div className="max-w-2xl mx-auto space-y-5 pb-2">
       <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="px-6 py-8 flex flex-col sm:flex-row items-start sm:items-end gap-5">
           <button type="button" onClick={() => photoRef.current?.click()} disabled={photoSaving} className="relative w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-blue-400 to-blue-700 flex items-center justify-center text-white text-2xl font-bold shadow-lg shrink-0 disabled:opacity-60" title="Update profile picture">
@@ -730,12 +736,7 @@ function StudentSettingsView({ onLogout, email }: { onLogout: () => void; email:
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 pb-24">
-      <div>
-        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Settings</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Manage your account preferences.</p>
-      </div>
-
+    <div className="max-w-2xl mx-auto space-y-5 pb-2">
       {saved && (
         <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 px-4 py-3 rounded-xl text-sm font-medium">
           <CheckCircle size={16} /> Settings saved.
@@ -1680,18 +1681,22 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
 
   const [payForm, setPayForm] = useState({ method: "Airtel" as "Airtel" | "MTN", ref: "", amount: String(myBed?.rentAmount ?? 1200) });
   const [paySubmitted, setPaySubmitted] = useState(false);
+  const [paySubmitting, setPaySubmitting] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
   const [payFile, setPayFile] = useState<File | null>(null);
   const [payFileName, setPayFileName] = useState("");
   const [mainForm, setMainForm] = useState({ category: "Plumbing" as IssueCategory, description: "" });
   const [mainSubmitted, setMainSubmitted] = useState(false);
+  const [mainSubmitting, setMainSubmitting] = useState(false);
+  const [mainError, setMainError] = useState<string | null>(null);
   const [mainImagePreview, setMainImagePreview] = useState<string | null>(null);
   const [mainImageUrl, setMainImageUrl] = useState<string | undefined>(undefined);
   const [mainFile, setMainFile] = useState<File | null>(null);
   const mainFileRef = useRef<HTMLInputElement>(null);
   const payFileRef = useRef<HTMLInputElement>(null);
-  const [headerVisible, setHeaderVisible] = useState(true);
-  const lastScrollY = useRef(0);
+  const [compactTitle, setCompactTitle] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const viewport = useStudentViewport();
 
   useEffect(() => {
     setShowWelcomeAd(shouldShowWelcomeAd(student.id));
@@ -1701,14 +1706,12 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
     const el = scrollContainerRef.current;
     if (!el) return;
     const handleScroll = () => {
-      const y = el.scrollTop;
-      if (y > lastScrollY.current + 8) { setHeaderVisible(false); }
-      else if (y < lastScrollY.current - 8 || y < 60) { setHeaderVisible(true); }
-      lastScrollY.current = y;
+      setCompactTitle(compactTitleVisible(headerCollapseProgress(el.scrollTop)));
     };
+    handleScroll();
     el.addEventListener("scroll", handleScroll, { passive: true });
     return () => el.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [view]);
 
   function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
@@ -1719,32 +1722,48 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
   }
 
   async function submitPayment() {
-    if (!payForm.ref || !myBed || !student.name) return;
-    const proofUrl = payFile && myBed ? await uploadStudentMedia(student.id, payFile, "receipts") : undefined;
-    await submitPay({
-      studentName: student.name,
-      bedSpaceId: myBed.id,
-      amount: parseFloat(payForm.amount) || 1200,
-      method: payForm.method,
-      transactionRef: payForm.ref,
-      proofUrl,
-    });
-    setPaySubmitted(true);
-    setTimeout(() => { setPaySubmitted(false); setPayForm({ method: "Airtel", ref: "", amount: String(myBed.rentAmount) }); setPayFile(null); setPayFileName(""); }, 2000);
+    if (!payForm.ref || !myBed || !student.name || paySubmitting) return;
+    setPayError(null);
+    setPaySubmitting(true);
+    try {
+      const proofUrl = payFile && myBed ? await uploadStudentMedia(student.id, payFile, "receipts") : undefined;
+      await submitPay({
+        studentName: student.name,
+        bedSpaceId: myBed.id,
+        amount: parseFloat(payForm.amount) || 1200,
+        method: payForm.method,
+        transactionRef: payForm.ref,
+        proofUrl,
+      });
+      setPaySubmitted(true);
+      setTimeout(() => { setPaySubmitted(false); setPayForm({ method: "Airtel", ref: "", amount: String(myBed.rentAmount) }); setPayFile(null); setPayFileName(""); }, 2000);
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : "Could not submit your payment. Please try again.");
+    } finally {
+      setPaySubmitting(false);
+    }
   }
 
   async function submitMaintenance() {
-    if (!mainForm.description || !myBed || !student.name) return;
-    const imageUrl = mainFile && myBed ? await uploadStudentMedia(student.id, mainFile, "maintenance") : mainImageUrl;
-    await submitMaint({
-      bedSpaceId: myBed.id,
-      studentName: student.name,
-      category: mainForm.category,
-      description: mainForm.description,
-      imageUrl,
-    });
-    setMainSubmitted(true);
-    setTimeout(() => { setMainSubmitted(false); setMainForm({ category: "Plumbing", description: "" }); setMainImagePreview(null); setMainImageUrl(undefined); setMainFile(null); }, 2000);
+    if (!mainForm.description || !myBed || !student.name || mainSubmitting) return;
+    setMainError(null);
+    setMainSubmitting(true);
+    try {
+      const imageUrl = mainFile && myBed ? await uploadStudentMedia(student.id, mainFile, "maintenance") : mainImageUrl;
+      await submitMaint({
+        bedSpaceId: myBed.id,
+        studentName: student.name,
+        category: mainForm.category,
+        description: mainForm.description,
+        imageUrl,
+      });
+      setMainSubmitted(true);
+      setTimeout(() => { setMainSubmitted(false); setMainForm({ category: "Plumbing", description: "" }); setMainImagePreview(null); setMainImageUrl(undefined); setMainFile(null); }, 2000);
+    } catch (err) {
+      setMainError(err instanceof Error ? err.message : "Could not submit your request. Please try again.");
+    } finally {
+      setMainSubmitting(false);
+    }
   }
 
   const bStatus = billingRec?.billing_status ?? "Open Window";
@@ -1769,18 +1788,43 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
     { id: "settings",      label: "Settings", icon: Settings },
   ];
 
+  const headerTitle =
+    view === "home"
+      ? (student?.name ?? "Student")
+      : view === "notifications"
+        ? (inbox.selected ? inbox.selected.title : "Inbox")
+        : view === "profile"
+          ? "My Profile"
+          : "Settings";
+
+  function goToView(next: StudentView) {
+    setView(next);
+    inbox.close();
+    setCompactTitle(false);
+    scrollContainerRef.current?.scrollTo({ top: 0 });
+  }
+
   return (
     <ColorModeProvider>
     <ColorModeRoot>
-    <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <div className={`bg-slate-900 dark:bg-black z-30 transition-transform duration-300 ease-in-out shrink-0 ${headerVisible ? "translate-y-0" : "-translate-y-full"}`}>
-        <div className="max-w-2xl mx-auto px-4 pt-4 pb-5">
-          <div className="flex items-center mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-emerald-600 rounded-lg flex items-center justify-center"><Building2 size={13} className="text-white" /></div>
-              <span className="text-emerald-400 text-xs font-mono font-bold tracking-wider">ROOM REVENUE</span>
-            </div>
-          </div>
+    <div
+      className={`h-dvh max-h-dvh min-h-0 flex bg-slate-50 dark:bg-slate-950 overflow-hidden ${viewport.sideNav ? "flex-row" : "flex-col"}`}
+      data-student-chrome={viewport.compactChrome ? "compact" : "full"}
+      data-student-nav={viewport.sideNav ? "side" : "bottom"}
+      style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
+    >
+      {viewport.sideNav && (
+        <StudentPortalNav
+          tabs={navTabs}
+          view={view}
+          unread={inbox.unread}
+          compactChrome={viewport.compactChrome}
+          sideNav
+          onSelect={goToView}
+        />
+      )}
+      <div ref={scrollContainerRef} className="flex-1 min-h-0 min-w-0 overflow-y-auto overscroll-y-contain [overflow-anchor:none]">
+      <StudentCollapsingHeader title={headerTitle} compactTitleVisible={compactTitle || viewport.compactChrome} compactChrome={viewport.compactChrome}>
           {view === "home" && (
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div>
@@ -1801,15 +1845,12 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
           )}
           {view === "profile" && <h1 className="text-xl font-bold text-white">My Profile</h1>}
           {view === "settings" && <h1 className="text-xl font-bold text-white">Settings</h1>}
-        </div>
-      </div>
-
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
-      <div className="max-w-2xl mx-auto px-4 py-5 pb-28">
+      </StudentCollapsingHeader>
+      <div className={`max-w-3xl mx-auto px-[max(1rem,min(1.5rem,4vw))] py-5 ${viewport.sideNav ? "pb-5" : viewport.compactChrome ? "pb-20" : "pb-28"}`}>
         {view === "home" && (
-          <div className="space-y-5">
+          <div className={viewport.sideNav ? "grid grid-cols-2 gap-4 items-start" : "space-y-5"}>
             {!myBed ? (
-              <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-5 text-sm text-amber-900 dark:text-amber-200">
+              <div className={`rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-5 text-sm text-amber-900 dark:text-amber-200 ${viewport.sideNav ? "col-span-2" : ""}`}>
                 <p className="font-bold text-base mb-1">No bed assignment found</p>
                 <p>This account is not linked to a residential bedspace yet. Please contact the landlord to assign your room and billing profile.</p>
               </div>
@@ -1839,7 +1880,7 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
                 </div>
 
                 {pendingPayments.length > 0 && (
-                  <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
+                  <div className={`bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3 ${viewport.sideNav ? "col-span-2" : ""}`}>
                     <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">{pendingPayments.length} payment{pendingPayments.length > 1 ? "s" : ""} awaiting verification</p>
@@ -1891,9 +1932,12 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
                       <p className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-emerald-600">{payFileName || "Click to upload receipt (JPEG/PNG)"}</p>
                       <input ref={payFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) { setPayFile(file); setPayFileName(file.name); } }} />
                     </div>
-                    <button onClick={submitPayment} disabled={!payForm.ref}
+                    {payError && (
+                      <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg px-3 py-2">{payError}</p>
+                    )}
+                    <button onClick={submitPayment} disabled={!payForm.ref || paySubmitting}
                       className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl font-semibold text-sm transition-all duration-150 hover:shadow-md min-h-[48px]">
-                      {paySubmitted ? "Submitted — Pending Review ✓" : "Submit Payment Proof"}
+                      {paySubmitting ? "Submitting…" : paySubmitted ? "Submitted — Pending Review ✓" : "Submit Payment Proof"}
                     </button>
                   </div>
                 </SectionCard>
@@ -1924,9 +1968,12 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
                       </div>
                     )}
                     <input ref={mainFileRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
-                    <button onClick={submitMaintenance} disabled={!mainForm.description}
+                    {mainError && (
+                      <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg px-3 py-2">{mainError}</p>
+                    )}
+                    <button onClick={submitMaintenance} disabled={!mainForm.description || mainSubmitting}
                       className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl font-bold text-sm tracking-wide transition-all duration-150 hover:shadow-md min-h-[52px] shadow-sm">
-                      {mainSubmitted ? "✓ Issue Reported Successfully" : "Submit Maintenance Report"}
+                      {mainSubmitting ? "Submitting…" : mainSubmitted ? "✓ Issue Reported Successfully" : "Submit Maintenance Report"}
                     </button>
                   </div>
                 </SectionCard>
@@ -1949,29 +1996,22 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
       </div>
       </div>
 
-      <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-t border-slate-200 dark:border-slate-800 px-4 pb-safe z-30 shrink-0">
-        <div className="max-w-2xl mx-auto flex">
-          {navTabs.map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => { setView(id); inbox.close(); }} className={`flex-1 flex flex-col items-center gap-1 py-3 transition-all duration-150 ${view === id ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}>
-              <span className="relative">
-                <Icon size={20} className="transition-transform duration-150" style={{ transform: view === id ? "scale(1.1)" : "scale(1)" }} />
-                {id === "notifications" && inbox.unread > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 text-white text-[9px] font-bold leading-4 text-center">
-                    {inbox.unread > 9 ? "9+" : inbox.unread}
-                  </span>
-                )}
-              </span>
-              <span className="text-[11px] font-semibold">{label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      {!viewport.sideNav && (
+        <StudentPortalNav
+          tabs={navTabs}
+          view={view}
+          unread={inbox.unread}
+          compactChrome={viewport.compactChrome}
+          sideNav={false}
+          onSelect={goToView}
+        />
+      )}
     </div>
     {showWelcomeAd && (
       <StudentWelcomeAd
         studentId={student.id}
         studentName={student.name}
-        onDownload={() => setView("settings")}
+        onDownload={() => goToView("settings")}
         onClose={() => setShowWelcomeAd(false)}
       />
     )}
@@ -2274,27 +2314,50 @@ function StudentEmailConfirmation({ onBackToLogin, onLoginSuccess, purpose = "co
 
 // ─── App Root ─────────────────────────────────────────────────────────────────
 
-type View = "landing" | "student-login" | "student-confirm" | "student-reset" | "landlord-login" | "student-dashboard" | "landlord-dashboard";
+type View = "landing" | "student-login" | "student-confirm" | "student-reset" | "landlord-login" | "student-dashboard" | "landlord-dashboard" | "admin-login" | "admin-dashboard";
+
+/** True when the app is running as the student portal (native APK shell or the ?app=student deep link). */
+function isStudentShell(): boolean {
+  return isStudentNativeShell();
+}
+
+/** True when the current URL targets the RRT admin console (e.g. /admin). */
+function isAdminRoute(): boolean {
+  return /(?:^|\/)admin\/?$/.test(window.location.pathname);
+}
 
 function AppRoutes() {
   const [view, setView] = useState<View>(() =>
     (() => {
+      if (isAdminRoute()) return "admin-login";
       const params = new URLSearchParams(window.location.search);
       const auth = params.get("auth");
       if (auth === "student-reset") return "student-reset";
       if (auth === "student" || auth === "student-confirm") return "student-confirm";
-      if (studentPortalLaunchParam(window.location.search)) return "student-login";
+      if (isStudentShell()) return "student-login";
       return "landing";
     })(),
   );
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const studentShell = isStudentShell();
   const tracker = useTrackerData();
 
   function handleLogout() { 
     void signOutStudent();
     window.history.replaceState({}, "", window.location.pathname);
-    setView("landing"); 
+    setView(studentShell ? "student-login" : "landing");
     setCurrentUser(null);
+  }
+
+  function handleAdminLoginSuccess(user: any) {
+    setCurrentUser(user);
+    setView("admin-dashboard");
+  }
+
+  function handleAdminLogout() {
+    void adminSignOut();
+    setCurrentUser(null);
+    setView("admin-login");
   }
 
   function handleStudentLoginSuccess(user: any) {
@@ -2306,6 +2369,14 @@ function AppRoutes() {
   function handleLandlordLoginSuccess(user: any) {
     setCurrentUser(user);
     setView("landlord-dashboard");
+  }
+
+  if (view === "admin-login") {
+    return <AdminLogin onLoginSuccess={handleAdminLoginSuccess} />;
+  }
+
+  if (view === "admin-dashboard") {
+    return <AdminDashboard admin={currentUser} onLogout={handleAdminLogout} />;
   }
 
   if (tracker.loading && view !== "landing" && view !== "student-login" && view !== "landlord-login" && view !== "student-confirm" && view !== "student-reset") {
@@ -2341,7 +2412,7 @@ function AppRoutes() {
   }
 
   if (view === "student-login") {
-    return <StudentLogin onBack={() => setView("landing")} onLoginSuccess={handleStudentLoginSuccess} />;
+    return <StudentLogin hideBack={studentShell} onBack={() => setView("landing")} onLoginSuccess={handleStudentLoginSuccess} />;
   }
 
   if (view === "student-confirm") {

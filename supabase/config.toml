@@ -6,3 +6,8 @@ project_id = "knxsnccrkqkosjbgzckv"
 # plus the is_landlord RPC.
 [functions.send-email]
 verify_jwt = false
+
+# The bootstrap action is guarded by ADMIN_BOOTSTRAP_SECRET (no JWT yet), and the
+# onboard action verifies an admin JWT inside the handler via verifyAuth.
+[functions.admin]
+verify_jwt = false

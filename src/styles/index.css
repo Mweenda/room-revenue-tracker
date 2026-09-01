@@ -1,3 +1,25 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+html, body, #root {
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (max-height: 560px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (min-aspect-ratio: 6/5) and (max-height: 599px) {
+  html {
+    font-size: 14px;
+  }
+}

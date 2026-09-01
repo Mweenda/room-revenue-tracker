@@ -2,15 +2,47 @@ import { getSupabase, isSupabaseConfigured } from "./supabase";
 
 export const STUDENT_APP_BUCKET = "student-apps";
 export const STUDENT_APK_OBJECT = "android/room-revenue-student.apk";
+export const STUDENT_APK_MANIFEST = "android/latest.json";
 export const STUDENT_APP_ID = "com.roomrevenue.student";
 export const STUDENT_PORTAL_START = "student";
+/** Keep in sync with apps/student_app/pubspec.yaml `version`. */
+export const STUDENT_APP_VERSION_NAME = "1.1.1";
+export const STUDENT_APP_VERSION_CODE = 3;
+
+export function studentApkReleaseObject(versionName = STUDENT_APP_VERSION_NAME, versionCode = STUDENT_APP_VERSION_CODE): string {
+  return `android/releases/${versionName}+${versionCode}/room-revenue-student.apk`;
+}
 
 const AD_STORAGE_PREFIX = "rrt-student-welcome-ad:";
 const SIGNED_URL_TTL_SECONDS = 120;
 
+export type StudentAppManifest = {
+  applicationId: string;
+  versionName: string;
+  versionCode: number;
+  object: string;
+  releaseObject: string;
+  releasedAt: string;
+};
+
 export type StudentAppDownload =
-  | { available: true; url: string; fileName: string }
+  | { available: true; url: string; fileName: string; versionName?: string; versionCode?: number }
   | { available: false; reason: "offline" | "missing" | "unauthorized" };
+
+export function studentManifestFromUnknown(value: unknown): StudentAppManifest | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.versionName !== "string" || typeof record.versionCode !== "number") return null;
+  if (typeof record.object !== "string" || typeof record.releaseObject !== "string") return null;
+  return {
+    applicationId: typeof record.applicationId === "string" ? record.applicationId : STUDENT_APP_ID,
+    versionName: record.versionName,
+    versionCode: record.versionCode,
+    object: record.object,
+    releaseObject: record.releaseObject,
+    releasedAt: typeof record.releasedAt === "string" ? record.releasedAt : "",
+  };
+}
 
 export function studentPortalLaunchParam(search = typeof window === "undefined" ? "" : window.location.search): boolean {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
@@ -51,9 +83,27 @@ export async function createStudentApkDownload(): Promise<StudentAppDownload> {
     .createSignedUrl(STUDENT_APK_OBJECT, SIGNED_URL_TTL_SECONDS);
 
   if (error || !data?.signedUrl) return { available: false, reason: "missing" };
+
+  let versionName: string | undefined;
+  let versionCode: number | undefined;
+  const { data: manifestFile } = await sb.storage.from(STUDENT_APP_BUCKET).download(STUDENT_APK_MANIFEST);
+  if (manifestFile) {
+    try {
+      const manifest = studentManifestFromUnknown(JSON.parse(await manifestFile.text()));
+      if (manifest) {
+        versionName = manifest.versionName;
+        versionCode = manifest.versionCode;
+      }
+    } catch {
+      // Latest APK is still downloadable without a manifest.
+    }
+  }
+
   return {
     available: true,
     url: data.signedUrl,
     fileName: STUDENT_APK_OBJECT.split("/").pop() ?? "room-revenue-student.apk",
+    versionName,
+    versionCode,
   };
 }

@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { Mail, Lock, ArrowLeft, User, Key, CheckCircle, AlertCircle, Home, CreditCard, FileText, Eye, EyeOff } from "lucide-react";
 import { fetchAuthenticatedStudent, requestOTP, requestStudentPasswordReset, verifyOTP, studentLogin } from "../lib/auth";
+import { useStudentViewport } from "../hooks/useStudentViewport";
 
 interface StudentLoginProps {
   onBack: () => void;
   onLoginSuccess: (user: any) => void;
+  /** In the student portal / APK shell there is no landlord entry point to return to. */
+  hideBack?: boolean;
 }
 
-export function StudentLogin({ onBack, onLoginSuccess }: StudentLoginProps) {
+export function StudentLogin({ onBack, onLoginSuccess, hideBack = false }: StudentLoginProps) {
+  const viewport = useStudentViewport();
   const [mode, setMode] = useState<"login" | "otp-request" | "otp-verify" | "forgot-password">("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,27 +116,30 @@ export function StudentLogin({ onBack, onLoginSuccess }: StudentLoginProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className={`min-h-dvh h-dvh max-h-dvh overflow-y-auto bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex justify-center ${viewport.sideNav ? "items-stretch" : "items-center"} p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] relative`}>
       {/* Decorative background elements */}
       <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
       
-      <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl w-full max-w-md p-8 border border-white/20 relative z-10">
+      <div className={`bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl w-full my-auto border border-white/20 relative z-10 max-h-[min(100%,100dvh)] overflow-y-auto ${viewport.sideNav ? "max-w-3xl p-4 grid sm:grid-cols-[minmax(0,15rem)_1fr] gap-4 items-start" : viewport.compactChrome ? "max-w-md p-4" : "max-w-md p-6 sm:p-8"}`}>
+        <div className={viewport.sideNav ? "min-w-0" : ""}>
+        {!hideBack && (
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-slate-300 hover:text-white mb-6 transition-colors"
+          className={`flex items-center gap-2 text-slate-300 hover:text-white transition-colors ${viewport.compactChrome ? "mb-3" : "mb-6"}`}
         >
           <ArrowLeft size={20} />
           <span className="text-sm font-medium">Back to Main</span>
         </button>
+        )}
 
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
-            <User size={40} className="text-white" />
+        <div className={`text-center ${viewport.compactChrome ? "mb-4" : "mb-8"} ${viewport.sideNav ? "sm:text-left" : ""}`}>
+          <div className={`${viewport.compactChrome ? "w-12 h-12" : "w-20 h-20"} bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl flex items-center justify-center ${viewport.sideNav ? "sm:mx-0 mx-auto" : "mx-auto"} ${viewport.compactChrome ? "mb-2" : "mb-4"} shadow-lg shadow-blue-500/30`}>
+            <User size={viewport.compactChrome ? 24 : 40} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Student Portal</h1>
-          <p className="text-slate-300 mt-2">Access your room and billing information</p>
-          <div className="flex items-center justify-center gap-4 mt-4 text-slate-400 text-xs">
+          <h1 className={`${viewport.compactChrome ? "text-xl" : "text-2xl"} font-bold text-white`}>Student Portal</h1>
+          <p className={`text-slate-300 ${viewport.compactChrome ? "mt-1 text-sm" : "mt-2"}`}>Access your room and billing information</p>
+          <div className={`flex items-center ${viewport.sideNav ? "sm:justify-start justify-center" : "justify-center"} gap-4 ${viewport.compactChrome ? "mt-2" : "mt-4"} text-slate-400 text-xs ${viewport.compactChrome ? "hidden sm:flex" : ""}`}>
             <div className="flex items-center gap-1">
               <Home size={14} className="text-blue-400" />
               <span>Room Details</span>
@@ -147,7 +154,9 @@ export function StudentLogin({ onBack, onLoginSuccess }: StudentLoginProps) {
             </div>
           </div>
         </div>
+        </div>
 
+        <div className="min-w-0">
         {error && (
           <div className="flex items-center gap-2 bg-red-500/20 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl mb-4 text-sm">
             <AlertCircle size={16} />
@@ -329,6 +338,7 @@ export function StudentLogin({ onBack, onLoginSuccess }: StudentLoginProps) {
             </button>
           </form>
         )}
+        </div>
       </div>
     </div>
   );

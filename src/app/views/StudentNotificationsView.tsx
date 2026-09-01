@@ -43,7 +43,7 @@ export function StudentNotificationsView({
   if (selected) {
     const Icon = KIND_ICON[selected.kind];
     return (
-      <div className="max-w-2xl mx-auto pb-24">
+      <div className="max-w-2xl mx-auto pb-2">
         <button
           type="button"
           onClick={onBack}
@@ -73,12 +73,7 @@ export function StudentNotificationsView({
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-24">
-      <div className="mb-4">
-        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Inbox</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Updates from your boarding house, in one place.</p>
-      </div>
-
+    <div className="max-w-2xl mx-auto pb-2">
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
         {loading && items.length === 0 ? (
           <p className="px-5 py-12 text-center text-sm text-slate-400">Loading messages…</p>

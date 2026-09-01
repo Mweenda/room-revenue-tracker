@@ -1,0 +1,10 @@
+#!/bin/sh
+# Minimal Gradle wrapper launcher.
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+JAR="$DIR/gradle/wrapper/gradle-wrapper.jar"
+PROPS="$DIR/gradle/wrapper/gradle-wrapper.properties"
+if [ ! -f "$JAR" ]; then
+  echo "gradle-wrapper.jar is missing. Run scripts/bootstrap-android-build.sh first." >&2
+  exit 1
+fi
+exec "${JAVA_HOME:-}/bin/java" -jar "$JAR" "$@"

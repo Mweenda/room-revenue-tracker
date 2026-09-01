@@ -460,6 +460,46 @@ export async function studentLogin(credentials: LoginCredentials): Promise<{ suc
   }
 }
 
+// RRT admin login. Authenticates with Supabase Auth, then confirms the account
+// holds an admin profile via the is_admin RPC. A non-admin session is dropped so
+// no elevated view can be reached with it.
+export async function adminLogin(credentials: LoginCredentials): Promise<{ success: boolean; user?: any; message: string }> {
+  const email = normalizeEmail(credentials.email);
+  const { getSupabase } = await import('./supabase');
+  const sb = getSupabase();
+  if (!sb) {
+    return { success: false, message: 'Database not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.' };
+  }
+
+  const { data: authData, error: authError } = await sb.auth.signInWithPassword({
+    email,
+    password: credentials.password,
+  });
+  if (authError || !authData.user) {
+    return { success: false, message: 'Invalid admin email or password' };
+  }
+
+  const { data: isAdmin, error: rpcError } = await sb.rpc('is_admin');
+  if (rpcError || !isAdmin) {
+    await sb.auth.signOut();
+    return { success: false, message: 'This account is not an RRT admin.' };
+  }
+
+  return {
+    success: true,
+    user: { id: authData.user.id, email: authData.user.email ?? email, name: 'RRT Admin', role: 'Admin' },
+    message: 'Login successful',
+  };
+}
+
+export async function adminSignOut(): Promise<void> {
+  const { getSupabase } = await import('./supabase');
+  const sb = getSupabase();
+  if (!sb) return;
+  const { error } = await sb.auth.signOut();
+  if (error) throw error;
+}
+
 export async function changeStudentPassword(currentPassword: string, newPassword: string): Promise<void> {
   const { getSupabase } = await import('./supabase');
   const sb = getSupabase();

@@ -21,9 +21,9 @@ export function StudentWelcomeAd({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4">
       <button type="button" className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" aria-label="Dismiss ad" onClick={dismiss} />
-      <aside className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700">
+      <aside className="relative w-full max-w-md max-h-[min(92dvh,40rem)] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700">
         <div className="bg-gradient-to-br from-emerald-600 to-slate-900 px-6 pt-6 pb-8 text-white">
           <button type="button" onClick={dismiss} className="absolute top-3 right-3 p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10" aria-label="Close">
             <X size={18} />

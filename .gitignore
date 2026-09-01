@@ -26,8 +26,19 @@ apps/student-apk/.gradle/
 apps/student-apk/build/
 apps/student-apk/app/build/
 apps/student-apk/local.properties
+apps/student_app/.dart_tool/
+apps/student_app/.idea/
+apps/student_app/build/
+apps/student_app/.flutter-plugins
+apps/student_app/.flutter-plugins-dependencies
+apps/student_app/android/.gradle/
+apps/student_app/android/local.properties
+apps/student_app/android/app/debug/
+apps/student_app/android/app/profile/
+apps/student_app/android/app/release/
 *.apk
 *.ap_
+*.aab
 
 # Coverage
 coverage/

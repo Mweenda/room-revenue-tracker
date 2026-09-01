@@ -42,7 +42,7 @@ export function useColorMode(): ColorModeContextValue {
 export function ColorModeRoot({ children }: { children: ReactNode }) {
   const { mode } = useColorMode();
   return (
-    <div className={mode === "dark" ? "dark h-screen" : "h-screen"} style={{ colorScheme: mode }}>
+    <div className={mode === "dark" ? "dark h-dvh min-h-0" : "h-dvh min-h-0"} style={{ colorScheme: mode }}>
       {children}
     </div>
   );

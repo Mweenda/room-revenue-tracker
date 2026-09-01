@@ -41,6 +41,12 @@ export function StudentAppDownloadCard() {
               ? "This device is already running the student app."
               : "Download the official APK for Android. Only signed-in students can fetch it from your boarding-house storage."}
           </p>
+          {status.available && (status.versionName || status.versionCode) && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
+              Version {status.versionName ?? "—"}
+              {typeof status.versionCode === "number" ? ` (${status.versionCode})` : ""}
+            </p>
+          )}
           {!native && status.available === false && status.reason === "missing" && (
             <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">The APK is not in the student-apps bucket yet. Ask your landlord to publish the latest build.</p>
           )}
