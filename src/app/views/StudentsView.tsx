@@ -374,7 +374,13 @@ export default function StudentsView({
         canManage={canManage}
         onOpenChange={setFormOpen}
         onCreate={async (input) => {
-          await onboardStudent(input);
+          const result = await onboardStudent(input) as { inviteSent?: boolean };
+          if (result?.inviteSent === false) {
+            toast.warning(`${input.name} assigned to ${input.bedId}`, {
+              description: `The student was saved, but the invite email could not be sent to ${input.email}. Ask them to use Forgot password once email delivery is working, or edit the student to resend.`,
+            });
+            return;
+          }
           toast.success(`${input.name} assigned to ${input.bedId}`, {
             description: `An invite was sent to ${input.email} to create a password.`,
           });

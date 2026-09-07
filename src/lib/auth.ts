@@ -185,10 +185,25 @@ export async function sendTenantNotification(notification: TenantNotification): 
   }
 
   try {
-    const { error } = await sb.functions.invoke('send-email', {
+    const { data: sessionData } = await sb.auth.getSession();
+    const token = sessionData.session?.access_token;
+    const { data, error } = await sb.functions.invoke('send-email', {
       body: { type, tenantId, details: details ?? {} },
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
-    if (error) throw error;
+    if (error) {
+      let detail = error.message;
+      try {
+        const body = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.();
+        if (body?.error) detail = body.error;
+      } catch {
+        // The Functions client does not always expose a JSON body.
+      }
+      throw new Error(detail);
+    }
+    if (data && typeof data === 'object' && 'error' in data && (data as { error?: string }).error) {
+      throw new Error((data as { error: string }).error);
+    }
     return true;
   } catch (error) {
     console.error(`Failed to send ${type} notification:`, error);

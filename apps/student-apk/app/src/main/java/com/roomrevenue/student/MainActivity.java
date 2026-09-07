@@ -1,14 +1,21 @@
 package com.roomrevenue.student;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Intent;
 import android.content.res.Configuration;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -19,11 +26,27 @@ public class MainActivity extends AppCompatActivity {
             + "if(window.visualViewport){window.visualViewport.dispatchEvent(new Event('resize'));}"
             + "})()";
     private WebView webView;
+    private ValueCallback<Uri[]> filePathCallback;
+    private ActivityResultLauncher<Intent> fileChooserLauncher;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        fileChooserLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                Uri[] uris = WebChromeClient.FileChooserParams.parseResult(
+                    result.getResultCode(),
+                    result.getResultCode() == Activity.RESULT_OK ? result.getData() : null
+                );
+                if (filePathCallback != null) {
+                    filePathCallback.onReceiveValue(uris);
+                    filePathCallback = null;
+                }
+            }
+        );
+
         FrameLayout root = new FrameLayout(this);
         root.setLayoutParams(new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -39,6 +62,27 @@ public class MainActivity extends AppCompatActivity {
         applyViewportSettings(webView.getSettings());
         webView.setInitialScale(0);
         webView.setWebViewClient(new WebViewClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(
+                WebView view,
+                ValueCallback<Uri[]> callback,
+                FileChooserParams params
+            ) {
+                if (filePathCallback != null) {
+                    filePathCallback.onReceiveValue(null);
+                }
+                filePathCallback = callback;
+                try {
+                    fileChooserLauncher.launch(params.createIntent());
+                    return true;
+                } catch (Exception ignored) {
+                    filePathCallback = null;
+                    callback.onReceiveValue(null);
+                    return false;
+                }
+            }
+        });
         webView.loadUrl(PORTAL_URL);
 
         root.addView(webView);
@@ -69,6 +113,8 @@ public class MainActivity extends AppCompatActivity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
         settings.setLoadWithOverviewMode(false);
         settings.setUseWideViewPort(true);
         settings.setSupportZoom(false);

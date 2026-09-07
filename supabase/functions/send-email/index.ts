@@ -292,6 +292,15 @@ async function createUserContext(request: Request): Promise<
   }
 }
 
+async function tenantLandlordId(ctx: FunctionContext, tenantId: string): Promise<string | null> {
+  const { data, error } = await ctx.supabaseAdmin.rpc("tenant_landlord_id", { p_tenant_id: tenantId });
+  if (error) {
+    console.error("tenant_landlord_id failed", error);
+    return null;
+  }
+  return typeof data === "string" && data ? data : null;
+}
+
 async function dispatchNotification(request: Request, ctx: FunctionContext): Promise<Response> {
   try {
     const { data: caller } = await ctx.supabase.auth.getUser();
@@ -349,17 +358,8 @@ async function dispatchNotification(request: Request, ctx: FunctionContext): Pro
     let failureReason: string | null = null;
 
     if (type === "welcome") {
-      const authEmail = await sendSupabaseAuthEmail(
-        ctx.supabaseAdmin,
-        tenant.email,
-        tenant.full_name ?? "Resident",
-        origin,
-      );
-      if (authEmail.via) {
-        via = authEmail.via;
-        delivered = true;
-      } else {
-        failureReason = authEmail.error;
+      const resendKey = (Deno.env.get("RESEND_API_KEY") ?? "").trim();
+      if (resendKey) {
         const setup = await createPasswordSetupLink(
           ctx.supabaseAdmin,
           tenant.email,
@@ -369,6 +369,31 @@ async function dispatchNotification(request: Request, ctx: FunctionContext): Pro
         if (setup) {
           detailsForMail.setupUrl = setup.url;
           detailsForMail.setupKind = setup.kind;
+        } else {
+          failureReason = "Could not create a password setup link";
+        }
+      } else {
+        const authEmail = await sendSupabaseAuthEmail(
+          ctx.supabaseAdmin,
+          tenant.email,
+          tenant.full_name ?? "Resident",
+          origin,
+        );
+        if (authEmail.via) {
+          via = authEmail.via;
+          delivered = true;
+        } else {
+          failureReason = authEmail.error;
+          const setup = await createPasswordSetupLink(
+            ctx.supabaseAdmin,
+            tenant.email,
+            tenant.full_name ?? "Resident",
+            origin,
+          );
+          if (setup) {
+            detailsForMail.setupUrl = setup.url;
+            detailsForMail.setupKind = setup.kind;
+          }
         }
       }
     }
@@ -406,7 +431,8 @@ async function dispatchNotification(request: Request, ctx: FunctionContext): Pro
 
     // Audit trail for every dispatch attempt, delivered or not.
     // Never persist invite URLs or hashed tokens — those are secrets.
-    await ctx.supabase.from("notification_log").insert({
+    // Write with the admin client so a missing INSERT policy cannot hide a send.
+    const { error: logError } = await ctx.supabaseAdmin.from("notification_log").insert({
       tenant_id: tenant.id,
       recipient_email: tenant.email,
       notification_type: type,
@@ -414,12 +440,14 @@ async function dispatchNotification(request: Request, ctx: FunctionContext): Pro
       status: delivered ? "sent" : "failed",
       error_message: failureReason,
       actor_email: caller.user.email ?? null,
+      landlord_id: await tenantLandlordId(ctx, tenant.id),
       details: {
         bedSpace: details.bedSpace ?? tenant.bed_space_id ?? null,
         via,
         setupKind: detailsForMail.setupKind ?? (via === "supabase_recovery" ? "recovery" : via === "supabase_invite" ? "invite" : null),
       },
     });
+    if (logError) console.error("notification_log insert failed", logError);
 
     return delivered
       ? Response.json({ success: true, via })

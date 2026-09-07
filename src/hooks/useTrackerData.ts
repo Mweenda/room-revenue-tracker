@@ -182,8 +182,8 @@ export function useTrackerData() {
           setRemoteStudents(null);
         }
         // Best-effort: a failed welcome email must not fail the onboarding.
-        await sendWelcomeEmail(result.student.id, input.bedId);
-        return { student: result.student };
+        const inviteSent = await sendWelcomeEmail(result.student.id, input.bedId);
+        return { student: result.student, inviteSent };
       }
 
       const billingByBed = new Map(billingRecords.map((r) => [r.billing_id, r]));

@@ -1,8 +1,79 @@
 import { getCurrentBillingMonth } from "../billing";
 import { getSupabase } from "../supabase";
 import { inviteStudentToPortal, normalizeEmail } from "../auth";
+import { contentTypeFor, describeStorageError, prepareUploadFile, storageObjectPath } from "../upload";
 import { findTenantByEmail, findTenantOnBed, reconcileBedSpace } from "./occupancy";
 import type { BedSpace, BillingRecord, OnboardStudentInput, Student } from "../types";
+
+type OnboardRpcRow = {
+  tenant_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  nrc: string | null;
+  move_in_date: string | null;
+  bed_space_id: string;
+  rent_amount: number | string;
+  block_code: BedSpace["blockCode"];
+  room_number: number;
+  bed_letter: string;
+  room_gender: BillingRecord["room_gender"];
+};
+
+function mapOnboardRow(row: OnboardRpcRow, fallback: OnboardStudentInput): {
+  bed: BedSpace;
+  billing: BillingRecord;
+  student: Student;
+} {
+  const rent = Number(row.rent_amount);
+  const moveIn = row.move_in_date || fallback.moveInDate;
+  const student: Student = {
+    id: row.tenant_id,
+    name: row.full_name,
+    phone: row.phone || "-",
+    email: row.email || "-",
+    nrc: row.nrc ?? "-",
+    moveInDate: moveIn,
+  };
+  const bed: BedSpace = {
+    id: row.bed_space_id,
+    blockCode: row.block_code,
+    roomNumber: row.room_number,
+    bedLetter: row.bed_letter,
+    identifier: `${row.block_code}-${row.room_number}-${row.bed_letter}`,
+    rentAmount: rent,
+    status: "occupied",
+    student,
+  };
+  const billing: BillingRecord = {
+    billing_id: row.bed_space_id,
+    house_block: row.block_code,
+    room_number: String(row.room_number),
+    bed_space: row.bed_letter,
+    room_gender: row.room_gender,
+    tenant_name: row.full_name,
+    phone_number: row.phone || "-",
+    entry_date: moveIn,
+    current_rent: rent,
+    target_month: getCurrentBillingMonth(),
+    accumulated_total: rent,
+    total_balance: rent,
+    days_past_due: 0,
+    billing_status: "Open Window",
+  };
+  return { bed, billing, student };
+}
+
+function rpcMissing(error: { message?: string; code?: string } | null): boolean {
+  const code = (error?.code ?? "").toUpperCase();
+  const text = (error?.message ?? "").toLowerCase();
+  return code === "PGRST202" || (text.includes("onboard_student") && (text.includes("does not exist") || text.includes("could not find")));
+}
+
+function postgresMessage(error: { message?: string; details?: string; hint?: string } | null | undefined, fallback: string): Error {
+  const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(" — ");
+  return new Error(text || fallback);
+}
 
 export async function onboardStudent(input: OnboardStudentInput): Promise<{
   bed: BedSpace;
@@ -13,7 +84,26 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
   if (!sb) throw new Error("Supabase not configured");
 
   const moveIn = input.moveInDate || new Date().toISOString().slice(0, 10);
+  const { data, error } = await sb.rpc("onboard_student", {
+    p_bed_space_id: input.bedId,
+    p_full_name: input.name,
+    p_phone: input.phone || "",
+    p_email: input.email,
+    p_nrc: input.nrc ?? "-",
+    p_move_in_date: moveIn,
+    p_rent_amount: input.rentAmount ?? null,
+    p_target_month: getCurrentBillingMonth(),
+  });
 
+  if (!error) {
+    const row = (Array.isArray(data) ? data[0] : data) as OnboardRpcRow | null;
+    if (!row) throw new Error("Onboarding did not return a student record");
+    return mapOnboardRow(row, { ...input, moveInDate: moveIn });
+  }
+
+  if (!rpcMissing(error)) throw postgresMessage(error, "Could not onboard the student");
+
+  // Fallback until migration 016 is applied: same checks, still not atomic.
   const { data: bedRow, error: bedErr } = await sb
     .from("bed_spaces")
     .select("*")
@@ -64,9 +154,9 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
     })
     .select("*")
     .single();
-  if (tenantErr) throw tenantErr;
+  if (tenantErr) throw postgresMessage(tenantErr, "Could not onboard the student");
 
-  const { data: billing, error: billErr } = await sb
+  const { error: billErr } = await sb
     .from("billing_records")
     .upsert({
       billing_id: input.bedId,
@@ -86,7 +176,7 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
     })
     .select("*")
     .single();
-  if (billErr) throw billErr;
+  if (billErr) throw postgresMessage(billErr, "Student was created but billing could not be updated");
 
   const { error: updateBedErr } = await sb
     .from("bed_spaces")
@@ -94,44 +184,20 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
     .eq("id", input.bedId);
   if (updateBedErr) throw updateBedErr;
 
-  const student: Student = {
-    id: tenant.id,
-    name: tenant.full_name,
-    phone: tenant.phone || "-",
-    email: tenant.email || "-",
+  return mapOnboardRow({
+    tenant_id: tenant.id,
+    full_name: tenant.full_name,
+    phone: tenant.phone,
+    email: tenant.email,
     nrc: tenant.nrc,
-    moveInDate: tenant.move_in_date,
-  };
-
-  const bed: BedSpace = {
-    id: bedRow.id,
-    blockCode: bedRow.block_code,
-    roomNumber: bedRow.room_number,
-    bedLetter: bedRow.bed_letter,
-    identifier: `${bedRow.block_code}-${bedRow.room_number}-${bedRow.bed_letter}`,
-    rentAmount: rent,
-    status: "occupied",
-    student,
-  };
-
-  const billingRecord: BillingRecord = {
-    billing_id: billing.billing_id,
-    house_block: billing.house_block,
-    room_number: billing.room_number,
-    bed_space: billing.bed_space,
-    room_gender: billing.room_gender,
-    tenant_name: billing.tenant_name,
-    phone_number: billing.phone_number,
-    entry_date: billing.entry_date,
-    current_rent: Number(billing.current_rent),
-    target_month: billing.target_month,
-    accumulated_total: Number(billing.accumulated_total),
-    total_balance: Number(billing.total_balance),
-    days_past_due: billing.days_past_due,
-    billing_status: billing.billing_status,
-  };
-
-  return { bed, billing: billingRecord, student };
+    move_in_date: tenant.move_in_date,
+    bed_space_id: tenant.bed_space_id,
+    rent_amount: rent,
+    block_code: bedRow.block_code,
+    room_number: bedRow.room_number,
+    bed_letter: bedRow.bed_letter,
+    room_gender: bedRow.room_gender,
+  }, { ...input, moveInDate: moveIn });
 }
 
 export async function updateStudent(input: {
@@ -236,14 +302,17 @@ export async function uploadTenantMedia(tenantId: string, file: File, category: 
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
-  const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-  const path = `${tenantId}/${category}-${Date.now()}.${extension}`;
-  const { error: uploadError } = await sb.storage.from("tenant-media").upload(path, file, {
+  const prepared = await prepareUploadFile(file);
+  const path = storageObjectPath(tenantId, category, prepared);
+  const { error: uploadError } = await sb.storage.from("tenant-media").upload(path, prepared, {
     cacheControl: "3600",
-    upsert: true,
-    contentType: file.type,
+    upsert: false,
+    contentType: contentTypeFor(prepared),
   });
-  if (uploadError) throw uploadError;
+  if (uploadError) {
+    console.error("Upload error:", uploadError.message, (uploadError as { statusCode?: string }).statusCode);
+    throw new Error(describeStorageError(uploadError));
+  }
 
   const { data } = sb.storage.from("tenant-media").getPublicUrl(path);
   if (category === "profile") {

@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -92,6 +93,7 @@ class _StudentPortalShellState extends State<StudentPortalShell>
     if (platform is AndroidWebViewController) {
       AndroidWebViewController.enableDebugging(false);
       platform.setMediaPlaybackRequiresUserGesture(false);
+      platform.setOnShowFileSelector(_androidFilePicker);
     }
 
     _controller = controller;
@@ -106,6 +108,26 @@ class _StudentPortalShellState extends State<StudentPortalShell>
   @override
   void didChangeMetrics() {
     _notifyWebViewport();
+  }
+
+  Future<List<String>> _androidFilePicker(FileSelectorParams params) async {
+    try {
+      final joined = params.acceptTypes.join(',').toLowerCase();
+      final imageOnly = joined.contains('image/') &&
+          !joined.contains('pdf') &&
+          !joined.contains('*/*');
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: params.mode == FileSelectorMode.openMultiple,
+        type: imageOnly ? FileType.image : FileType.any,
+      );
+      if (result == null) return const <String>[];
+      return result.files
+          .where((file) => file.path != null && file.path!.isNotEmpty)
+          .map((file) => Uri.file(file.path!).toString())
+          .toList();
+    } catch (_) {
+      return const <String>[];
+    }
   }
 
   Future<void> _notifyWebViewport() async {
