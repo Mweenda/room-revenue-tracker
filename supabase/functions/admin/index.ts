@@ -3,9 +3,12 @@
 // Actions (one endpoint):
 //   • bootstrap-admin    — one-time seed of the RRT admin account. Guarded by
 //     the ADMIN_BOOTSTRAP_SECRET shared secret (x-bootstrap-secret header).
-//   • onboard-landlord   — creates a landlord auth user + profile.
+//   • onboard-landlord   — creates a landlord auth user + profile. Refuses if
+//     the email already belongs to an auth user (does not reset their password).
 //   • update-landlord    — edits a landlord's contact details.
-//   • set-landlord-status— suspends / reactivates a landlord (profile flag + auth ban).
+//   • set-landlord-status— suspends / reactivates a landlord (profile flag +
+//     auth ban). Ban failure aborts so the UI cannot report success while the
+//     account still signs in. RLS helpers also require profiles.status = active.
 //   • delete-landlord    — removes a landlord account (blocked while they own property).
 //   • log-login          — records an admin sign-in in the audit trail.
 //
@@ -14,6 +17,12 @@
 // service-role admin client. verify_jwt is disabled for this function (see
 // supabase/config.toml) so the OPTIONS preflight and secret-guarded bootstrap
 // can reach the handler.
+
+import {
+  alreadyRegistered,
+  existingAuthUserAction,
+  profileRoleConflict,
+} from "../_shared/authUserPolicy.ts";
 
 const ADMIN_EMAIL = "admin@rrt.io";
 const ADMIN_FULL_NAME = "RRT Admin";
@@ -32,11 +41,6 @@ function withCors(response: Response): Response {
     next.headers.set(key, value);
   }
   return next;
-}
-
-function alreadyRegistered(message: string | undefined): boolean {
-  const text = (message ?? "").toLowerCase();
-  return text.includes("already") && (text.includes("registered") || text.includes("exist"));
 }
 
 function isEmail(value: unknown): value is string {
@@ -94,13 +98,14 @@ async function logAudit(
   }
 }
 
-/** Creates the auth user (or reuses/updates an existing one) and returns its id. */
+/** Creates the auth user. Bootstrap may reset the existing admin; onboard must not. */
 async function ensureAuthUser(
   admin: any,
   email: string,
   password: string,
   fullName: string,
   role: "admin" | "landlord",
+  options: { allowOverwrite?: boolean } = {},
 ): Promise<{ userId: string } | { error: string; status: number }> {
   const created = await admin.auth.admin.createUser({
     email,
@@ -114,6 +119,10 @@ async function ensureAuthUser(
   }
   if (!alreadyRegistered(created.error.message)) {
     return { error: created.error.message ?? "Could not create the account", status: 400 };
+  }
+
+  if (existingAuthUserAction(options.allowOverwrite === true) === "conflict") {
+    return { error: "An account with this email already exists.", status: 409 };
   }
 
   const list = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -143,12 +152,15 @@ async function upsertProfile(
 ): Promise<{ id: string } | { error: string }> {
   const { data: existing, error: lookupError } = await admin
     .from("profiles")
-    .select("id")
+    .select("id, role")
     .ilike("email", params.email)
     .maybeSingle();
   if (lookupError) return { error: lookupError.message };
 
   if (existing) {
+    if (profileRoleConflict(existing.role, params.role)) {
+      return { error: `This email is already registered as a ${existing.role}.` };
+    }
     const { error } = await admin
       .from("profiles")
       .update({
@@ -198,7 +210,9 @@ async function bootstrapAdmin(req: Request, body: any): Promise<Response> {
   const { createAdminClient } = await import("npm:@supabase/server/core");
   const admin = createAdminClient();
 
-  const user = await ensureAuthUser(admin, ADMIN_EMAIL, password, ADMIN_FULL_NAME, "admin");
+  const user = await ensureAuthUser(admin, ADMIN_EMAIL, password, ADMIN_FULL_NAME, "admin", {
+    allowOverwrite: true,
+  });
   if ("error" in user) {
     return Response.json({ error: user.error }, { status: user.status });
   }
@@ -295,15 +309,23 @@ async function setLandlordStatus(ctx: AdminContext, body: any): Promise<Response
   if (loadError) return Response.json({ error: loadError.message }, { status: 500 });
   if (!profile || profile.role !== "landlord") return Response.json({ error: "Landlord not found" }, { status: 404 });
 
-  const { error } = await ctx.admin.from("profiles").update({ status }).eq("id", id);
-  if (error) return Response.json({ error: error.message }, { status: 500 });
-
-  // Mirror the flag onto the auth user so a suspended landlord cannot sign in.
+  // Ban or unban first so a failed GoTrue call cannot leave the UI claiming
+  // success while the landlord still has a working password.
   if (profile.auth_user_id) {
     const ban = status === "suspended" ? BAN_DURATION : "none";
     const { error: banError } = await ctx.admin.auth.admin.updateUserById(profile.auth_user_id, { ban_duration: ban });
-    if (banError) console.error("ban update failed", banError);
+    if (banError) {
+      return Response.json(
+        { error: status === "suspended"
+          ? "Could not revoke the landlord's sign-in. They were not suspended."
+          : "Could not restore the landlord's sign-in. They were not reactivated." },
+        { status: 500 },
+      );
+    }
   }
+
+  const { error } = await ctx.admin.from("profiles").update({ status }).eq("id", id);
+  if (error) return Response.json({ error: error.message }, { status: 500 });
 
   await logAudit(ctx.admin, {
     actorEmail: ctx.callerEmail,
