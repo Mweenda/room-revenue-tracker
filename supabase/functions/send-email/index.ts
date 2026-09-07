@@ -11,6 +11,8 @@
 // npm: imports are loaded inside POST so OPTIONS preflight can return 200 even
 // if a dependency fails to boot.
 
+import { resolvePortalOrigin as portalOriginFrom } from "./portalOrigin.ts";
+
 const FROM = "Room Revenue Tracker <noreply@roomrevenue.com>";
 
 type NotificationType =
@@ -58,12 +60,7 @@ function kwacha(value: unknown): string {
 }
 
 function resolvePortalOrigin(request: Request): string {
-  const origin = request.headers.get("origin")?.trim();
-  if (origin && /^https?:\/\/[a-z0-9.[\]:-]+$/i.test(origin)) {
-    return origin.replace(/\/$/, "");
-  }
-  const env = (Deno.env.get("PUBLIC_SITE_URL") ?? "").trim().replace(/\/$/, "");
-  return env || "http://localhost:5173";
+  return portalOriginFrom(request.headers.get("origin"), Deno.env.get("PUBLIC_SITE_URL"));
 }
 
 const corsHeaders = {
