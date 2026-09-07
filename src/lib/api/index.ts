@@ -1,12 +1,12 @@
 export { fetchBeds } from "./beds";
 export { fetchBillingRecords } from "./billing";
-export { fetchPayments, submitPayment, verifyPayment, rejectPayment } from "./payments";
+export { fetchPayments, submitPayment, verifyPayment, rejectPayment, updatePayment } from "./payments";
 export { fetchIssues, submitIssue, updateIssueStatus } from "./issues";
 export { fetchStudentNotifications, markStudentNotificationRead, ensureRentDueNotification } from "./notifications";
 export { fetchUtilities, upsertUtility, toggleUtilitySettled } from "./utilities";
 export { fetchStudentAccounts, evictTenant, updateStudentAccount } from "./students";
 export type { StudentAccountRow, EvictTenantResult } from "./students";
-export { onboardStudent, updateStudent, vacateBedSpace, uploadStudentProfilePhoto, uploadTenantMedia } from "./tenants";
+export { onboardStudent, updateStudent, vacateBedSpace, uploadStudentProfilePhoto, uploadTenantMedia, completeStudentOnboarding, listVacantBedsForOnboarding } from "./tenants";
 export { updateLandlordProfile } from "./profiles";
 export { persistFinancialSnapshot } from "./snapshots";
 export { applyRentIncrement } from "./rent";

@@ -1,6 +1,8 @@
 import type { BillingRecord, BillingStatus, BlockCode, UtilityBlock } from "./types";
 
 export const OWNER_UTILITY_CAP = 70;
+/** Rent due on the 1st; overdue only after this many days have elapsed. */
+export const GRACE_PERIOD_DAYS = 5;
 
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 export const BILLING_MONTHS = [...MONTH_ABBR];
@@ -17,16 +19,28 @@ export function getCurrentBillingMonth(): BillingMonth {
 }
 
 /** Rent is due on the 1st of the target month. */
-export function getDaysPastDue(targetMonth: string, year = getCurrentYear()): number {
+export function getDaysPastDue(
+  targetMonth: string,
+  year = getCurrentYear(),
+  today = new Date(),
+): number {
   if (!targetMonth || targetMonth === "-") return 0;
   const idx = MONTH_ABBR.indexOf(targetMonth as BillingMonth);
   if (idx < 0) return 0;
 
   const due = new Date(year, idx, 1);
-  const today = new Date();
+  const now = new Date(today);
   due.setHours(0, 0, 0, 0);
-  today.setHours(0, 0, 0, 0);
-  return Math.max(0, Math.floor((today.getTime() - due.getTime()) / 86_400_000));
+  now.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((now.getTime() - due.getTime()) / 86_400_000));
+}
+
+export function isOverdueAfterGrace(
+  daysPastDue: number,
+  totalBalance: number,
+  graceDays = GRACE_PERIOD_DAYS,
+): boolean {
+  return totalBalance > 0 && daysPastDue > graceDays;
 }
 
 export function formatMonthYear(month: BillingMonth, year = getCurrentYear()): string {
@@ -103,10 +117,8 @@ export function computeBillingStatus(
 ): BillingStatus {
   if (!tenantName || tenantName.trim().toLowerCase() === "vacant") return "Vacant";
   if (totalBalance === 0) return "Paid / Secured";
-  if (totalBalance > 0 && (daysPastDue > 5 || ["Mar", "Jun"].includes(targetMonth))) {
-    return "OVERDUE / UNPAID";
-  }
-  if (totalBalance > 0 && daysPastDue >= 1 && daysPastDue <= 5) return "Grace Period";
+  if (isOverdueAfterGrace(daysPastDue, totalBalance)) return "OVERDUE / UNPAID";
+  if (totalBalance > 0 && daysPastDue >= 1 && daysPastDue <= GRACE_PERIOD_DAYS) return "Grace Period";
   if (totalBalance === currentRent && targetMonth === currentMonth) return "Open Window";
   if (totalBalance > 0) return "Open Window";
   return "Vacant";

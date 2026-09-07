@@ -25,6 +25,7 @@ type BedRow = {
     nrc: string | null;
     move_in_date: string | null;
     profile_image_url?: string | null;
+    gender?: RoomGender | null;
   }> | null;
 };
 
@@ -90,6 +91,7 @@ function mapStudent(t: NonNullable<BedRow["tenants"]>[number]): Student {
     email: t.email ?? "",
     moveInDate: t.move_in_date ?? "-",
     profileImageUrl: t.profile_image_url ?? undefined,
+    gender: t.gender ?? undefined,
   };
 }
 
@@ -105,6 +107,7 @@ export function mapBed(row: BedRow): BedSpace {
     status: hasTenant ? "occupied" : "vacant",
     student: tenant ? mapStudent(tenant) : undefined,
     rentAmount: Number(row.rent_amount),
+    roomGender: row.room_gender,
   };
 }
 

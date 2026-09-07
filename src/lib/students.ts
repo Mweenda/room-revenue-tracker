@@ -1,6 +1,9 @@
 import type { StudentAccountRow } from "./api/students";
-import type { BedSpace, BillingRecord, TenantStatus, UpdateStudentAccountInput } from "./types";
+import type { BedSpace, BillingRecord, Payment, TenantStatus, UpdateStudentAccountInput } from "./types";
 import { bedHasTenant } from "./occupancy";
+import { lastVerifiedPayment } from "./paymentsEdit";
+import { rentDueDateIso } from "./rentDue";
+import { getCurrentYear } from "./billing";
 
 /**
  * Builds the Students page rows from in-memory beds and billing, so the page
@@ -25,6 +28,7 @@ export function deriveStudentAccounts(
         nrc: student.nrc || null,
         move_in_date: student.moveInDate || null,
         profile_image_url: student.profileImageUrl ?? null,
+        gender: student.gender ?? billing?.room_gender ?? bed.roomGender ?? null,
         bed_space_id: bed.id,
         tenant_status: "active" as TenantStatus,
         status_changed_at: null,
@@ -36,6 +40,11 @@ export function deriveStudentAccounts(
         rent_amount: bed.rentAmount,
         total_balance: billing?.total_balance ?? null,
         billing_status: billing?.billing_status ?? null,
+        days_past_due: billing?.days_past_due ?? null,
+        last_payment_at: null,
+        last_payment_amount: null,
+        due_date: rentDueDateIso(billing?.target_month ?? "-", getCurrentYear()),
+        room_gender: billing?.room_gender ?? bed.roomGender ?? null,
       };
     })
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
@@ -151,4 +160,27 @@ export function applyStudentAccountUpdate(
   });
 
   return { beds: nextBeds, billingRecords: nextBilling };
+}
+
+export function enrichStudentAccounts(
+  rows: StudentAccountRow[],
+  payments: Payment[],
+  billingRecords: BillingRecord[] = [],
+  year = getCurrentYear(),
+): StudentAccountRow[] {
+  const billingByBed = new Map(billingRecords.map((record) => [record.billing_id, record]));
+  return rows.map((row) => {
+    const billing = row.bed_space_id ? billingByBed.get(row.bed_space_id) : undefined;
+    const last = lastVerifiedPayment(payments, row.bed_space_id ?? "", row.full_name);
+    const targetMonth = billing?.target_month ?? null;
+    return {
+      ...row,
+      gender: row.gender ?? billing?.room_gender ?? row.room_gender ?? null,
+      days_past_due: row.days_past_due ?? billing?.days_past_due ?? null,
+      last_payment_at: last?.submittedAt ?? row.last_payment_at ?? null,
+      last_payment_amount: last?.amount ?? row.last_payment_amount ?? null,
+      due_date: row.due_date ?? rentDueDateIso(targetMonth ?? "-", year),
+      room_gender: row.room_gender ?? billing?.room_gender ?? null,
+    };
+  });
 }

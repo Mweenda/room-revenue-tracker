@@ -168,7 +168,7 @@ export function reconcileBedsLocal(
         house_block: billing?.house_block ?? bed.blockCode,
         room_number: billing?.room_number ?? String(bed.roomNumber),
         bed_space: billing?.bed_space ?? bed.bedLetter,
-        room_gender: billing?.room_gender ?? "Male",
+        room_gender: billing?.room_gender ?? bed.roomGender ?? "Male",
         tenant_name: "Vacant",
         phone_number: "-",
         entry_date: "-",

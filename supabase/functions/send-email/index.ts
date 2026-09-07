@@ -192,7 +192,7 @@ function buildEmail(
         html: shell("You're invited to the student portal", "#00855d", `
           <p>Your landlord has assigned you a bed space${bed ? `: <strong>${bed}</strong>` : ""}.</p>
           ${setupBlock}
-          <p>After you save your password you will be taken straight to your billing, payments, and maintenance page.</p>
+          <p>This link stays valid for at least 15 minutes (usually 24 hours). After you open it, choose your gender, pick a vacant bed for that gender, enter your details, create a password, and you will land on your dashboard.</p>
         `, name),
       };
     }
@@ -448,6 +448,19 @@ async function dispatchNotification(request: Request, ctx: FunctionContext): Pro
       },
     });
     if (logError) console.error("notification_log insert failed", logError);
+
+    if (type === "welcome") {
+      try {
+        await ctx.supabaseAdmin.rpc("ensure_student_invite", {
+          p_email: tenant.email,
+          p_full_name: tenant.full_name ?? null,
+          p_tenant_id: tenant.id,
+          p_landlord_id: await tenantLandlordId(ctx, tenant.id),
+        });
+      } catch (inviteError) {
+        console.error("ensure_student_invite failed", inviteError);
+      }
+    }
 
     return delivered
       ? Response.json({ success: true, via })

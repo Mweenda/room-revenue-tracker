@@ -195,7 +195,7 @@ export function StudentLogin({ onBack, onLoginSuccess, hideBack = false }: Stude
         </div>
 
         <p className="text-xs text-slate-400 text-center mb-4">
-          New students must be onboarded by the landlord first. Registration only works for emails already assigned to a bed space.
+          New students open the invite link from their landlord, choose gender and a vacant bed, then create a password.
         </p>
 
         {mode === "login" && (

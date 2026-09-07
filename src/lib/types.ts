@@ -19,6 +19,7 @@ export interface Student {
   email: string;
   moveInDate: string;
   profileImageUrl?: string;
+  gender?: RoomGender;
 }
 
 export interface BedSpace {
@@ -30,6 +31,7 @@ export interface BedSpace {
   status: BedStatus;
   student?: Student;
   rentAmount: number;
+  roomGender?: RoomGender;
 }
 
 export interface BillingRecord {
@@ -93,6 +95,26 @@ export interface OnboardStudentInput {
   moveInDate: string;
   nrc?: string;
   rentAmount?: number;
+  gender?: RoomGender;
+}
+
+export interface CompleteStudentOnboardingInput {
+  gender: RoomGender;
+  bedId: string;
+  name: string;
+  phone: string;
+  nrc?: string;
+  moveInDate: string;
+}
+
+export interface UpdatePaymentInput {
+  id: string;
+  studentName: string;
+  bedSpaceId: string;
+  amount: number;
+  method: PaymentMethod;
+  transactionRef: string;
+  submittedAt: string;
 }
 
 export interface UpdateStudentAccountInput {

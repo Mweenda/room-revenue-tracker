@@ -82,7 +82,7 @@ export async function fetchTenantByEmail(email: string) {
   const normalized = normalizeEmail(email);
   const { data, error } = await sb
     .from('tenants')
-    .select('id, full_name, email, phone, nrc, move_in_date, bed_space_id, profile_image_url, auth_user_id')
+        .select('id, full_name, email, phone, nrc, move_in_date, bed_space_id, profile_image_url, gender, auth_user_id')
     .eq('email', normalized)
     .eq('status', 'active')
     .maybeSingle();
@@ -313,7 +313,7 @@ export async function fetchAuthenticatedStudent(): Promise<AuthenticatedStudent 
   const byAuthId = user.id
     ? await sb
         .from('tenants')
-        .select('id, full_name, email, phone, nrc, move_in_date, bed_space_id, profile_image_url')
+        .select('id, full_name, email, phone, nrc, move_in_date, bed_space_id, profile_image_url, gender')
         .eq('auth_user_id', user.id)
         .eq('status', 'active')
         .maybeSingle()

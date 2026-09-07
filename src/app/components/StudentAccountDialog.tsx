@@ -10,7 +10,7 @@ import {
 import { buttonStyles, inputStyles } from "./primitives";
 import { formatBedOption } from "../../lib/students";
 import type { StudentAccountRow } from "../../lib/api/students";
-import type { BedSpace, OnboardStudentInput, UpdateStudentAccountInput } from "../../lib/types";
+import type { BedSpace, OnboardStudentInput, RoomGender, UpdateStudentAccountInput } from "../../lib/types";
 
 export type StudentFormValues = {
   name: string;
@@ -20,6 +20,7 @@ export type StudentFormValues = {
   moveInDate: string;
   bedSpaceId: string;
   rentAmount: string;
+  gender: RoomGender | "";
 };
 
 function todayIso(): string {
@@ -35,6 +36,7 @@ function valuesFromStudent(row: StudentAccountRow): StudentFormValues {
     moveInDate: row.move_in_date ?? todayIso(),
     bedSpaceId: row.bed_space_id ?? "",
     rentAmount: row.rent_amount != null ? String(row.rent_amount) : "",
+    gender: row.gender ?? row.room_gender ?? "",
   };
 }
 
@@ -47,6 +49,7 @@ function emptyValues(defaultBedId: string, defaultRent: string): StudentFormValu
     moveInDate: todayIso(),
     bedSpaceId: defaultBedId,
     rentAmount: defaultRent,
+    gender: "",
   };
 }
 
@@ -74,7 +77,10 @@ export default function StudentAccountDialog({
   const [error, setError] = useState<string | null>(null);
 
   const assignableBeds = useMemo(() => {
-    const vacant = beds.filter((bed) => !bed.student).sort((a, b) => a.id.localeCompare(b.id));
+    const vacant = beds
+      .filter((bed) => !bed.student)
+      .filter((bed) => !form.gender || !bed.roomGender || bed.roomGender === form.gender)
+      .sort((a, b) => a.id.localeCompare(b.id));
     if (mode === "edit" && student?.bed_space_id) {
       const current = beds.find((bed) => bed.id === student.bed_space_id);
       if (current && !vacant.some((bed) => bed.id === current.id)) {
@@ -82,7 +88,7 @@ export default function StudentAccountDialog({
       }
     }
     return vacant;
-  }, [beds, mode, student]);
+  }, [beds, mode, student, form.gender]);
 
   useEffect(() => {
     if (!open) return;
@@ -123,6 +129,10 @@ export default function StudentAccountDialog({
       setError("An email is required so we can send the password invite.");
       return;
     }
+    if (mode === "create" && !form.gender) {
+      setError("Select whether the student is male or female.");
+      return;
+    }
     if (!form.bedSpaceId) {
       setError("Choose a bed space.");
       return;
@@ -144,6 +154,7 @@ export default function StudentAccountDialog({
           nrc: form.nrc.trim() || undefined,
           moveInDate: form.moveInDate || todayIso(),
           rentAmount,
+          gender: form.gender || undefined,
         });
       } else if (student) {
         await onUpdate({
@@ -172,7 +183,7 @@ export default function StudentAccountDialog({
           <DialogTitle>{mode === "create" ? "Add student" : `Edit ${student?.full_name ?? "student"}`}</DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Assign a vacant bed and set the monthly rent. We’ll email them a link to create a password and open their portal."
+              ? "Assign gender and a matching vacant bed. We’ll email a link (valid at least 15 minutes) so they can finish onboarding, pick their bed if needed, and create a password."
               : "Update contact details, move the student to another bed, or change the monthly rent."}
           </DialogDescription>
         </DialogHeader>
@@ -224,6 +235,32 @@ export default function StudentAccountDialog({
             </label>
 
             <label className="space-y-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Gender</span>
+              <select
+                value={form.gender}
+                onChange={(e) => {
+                  const next = e.target.value as RoomGender | "";
+                  const first = beds
+                    .filter((bed) => !bed.student)
+                    .filter((bed) => !next || !bed.roomGender || bed.roomGender === next)
+                    .sort((a, b) => a.id.localeCompare(b.id))[0];
+                  setForm((prev) => ({
+                    ...prev,
+                    gender: next,
+                    bedSpaceId: first?.id ?? "",
+                    rentAmount: first ? String(first.rentAmount) : prev.rentAmount,
+                  }));
+                }}
+                className={inputStyles}
+                required={mode === "create"}
+              >
+                <option value="">Select gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </label>
+
+            <label className="space-y-1.5">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Move-in date</span>
               <input
                 type="date"
@@ -247,6 +284,7 @@ export default function StudentAccountDialog({
                   <option key={bed.id} value={bed.id}>
                     {formatBedOption(bed)}
                     {student?.bed_space_id === bed.id ? " · current" : " · vacant"}
+                    {bed.roomGender ? ` · ${bed.roomGender}` : ""}
                     {` · K${bed.rentAmount}`}
                   </option>
                 ))}

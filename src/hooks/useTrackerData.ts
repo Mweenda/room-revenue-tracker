@@ -7,7 +7,7 @@ import {
   SEED_UTILITIES,
 } from "../data/seed";
 import * as api from "../lib/api";
-import { calcUtilitySplit, getCurrentBillingMonth } from "../lib/billing";
+import { calcUtilitySplit, getCurrentBillingMonth, refreshBillingRecords } from "../lib/billing";
 import {
   auditOccupancyLocal,
   deriveBedFromTenantAndBilling,
@@ -17,7 +17,8 @@ import {
 } from "../lib/occupancy";
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 import { inviteStudentToPortal, sendTenantNotification, sendWelcomeEmail } from "../lib/auth";
-import { deriveStudentAccounts, applyStudentAccountUpdate } from "../lib/students";
+import { deriveStudentAccounts, applyStudentAccountUpdate, enrichStudentAccounts } from "../lib/students";
+import { applyPaymentEdit } from "../lib/paymentsEdit";
 import { buildRentPreview, type RentIncreaseMode, type RentScope } from "../lib/rent";
 import type { RentIncrementRow } from "../lib/api/rent";
 import type { StudentAccountRow } from "../lib/api/students";
@@ -40,7 +41,17 @@ export type TrackerDataSource = "supabase" | "local";
 
 function reconcileBedsWithBilling(beds: BedSpace[], billingRecords: BillingRecord[]): BedSpace[] {
   const billingByBed = new Map(billingRecords.map((record) => [record.billing_id, record]));
-  return beds.map((bed) => deriveBedFromTenantAndBilling(bed, billingByBed.get(bed.id)));
+  return beds.map((bed) => {
+    const billing = billingByBed.get(bed.id);
+    const reconciled = deriveBedFromTenantAndBilling(bed, billing);
+    return {
+      ...reconciled,
+      roomGender: reconciled.roomGender ?? billing?.room_gender,
+      student: reconciled.student
+        ? { ...reconciled.student, gender: reconciled.student.gender ?? billing?.room_gender }
+        : undefined,
+    };
+  });
 }
 
 // The seed fixtures are a demo dataset for builds with no Supabase credentials.
@@ -51,7 +62,7 @@ const OFFLINE_DEMO = !isSupabaseConfigured;
 export function useTrackerData() {
   const [beds, setBeds] = useState<BedSpace[]>(OFFLINE_DEMO ? SEED_BEDS : []);
   const [billingRecords, setBillingRecords] = useState<BillingRecord[]>(
-    OFFLINE_DEMO ? BILLING_RECORDS : [],
+    OFFLINE_DEMO ? refreshBillingRecords(BILLING_RECORDS) : [],
   );
   const [payments, setPayments] = useState<Payment[]>(OFFLINE_DEMO ? SEED_PAYMENTS : []);
   const [issues, setIssues] = useState<MaintenanceIssue[]>(OFFLINE_DEMO ? SEED_ISSUES : []);
@@ -154,9 +165,9 @@ export function useTrackerData() {
   );
 
   const students = useMemo<StudentAccountRow[]>(() => {
-    if (remoteStudents) return remoteStudents;
-    return [...deriveStudentAccounts(beds, billingRecords), ...localInactiveStudents];
-  }, [remoteStudents, beds, billingRecords, localInactiveStudents]);
+    const rows = remoteStudents ?? [...deriveStudentAccounts(beds, billingRecords), ...localInactiveStudents];
+    return enrichStudentAccounts(rows, payments, billingRecords);
+  }, [remoteStudents, beds, billingRecords, localInactiveStudents, payments]);
 
   const onboard = useCallback(
     async (input: OnboardStudentInput) => {
@@ -204,6 +215,7 @@ export function useTrackerData() {
         nrc: input.nrc ?? "-",
         email: input.email,
         moveInDate: input.moveInDate || new Date().toISOString().slice(0, 10),
+        gender: input.gender,
       };
       const rent = input.rentAmount ?? targetBed.rentAmount;
       setBeds((prev) =>
@@ -601,6 +613,30 @@ export function useTrackerData() {
     [source, beds],
   );
 
+  const updatePay = useCallback(
+    async (input: {
+      id: string;
+      studentName: string;
+      bedSpaceId: string;
+      amount: number;
+      method: PaymentMethod;
+      transactionRef: string;
+      submittedAt: string;
+    }) => {
+      if (source === "supabase") {
+        const updated = await api.updatePayment(input);
+        setPayments((prev) => prev.map((p) => (p.id === input.id ? updated : p)));
+        return updated;
+      }
+      const current = payments.find((p) => p.id === input.id);
+      if (!current) throw new Error("Payment not found");
+      const updated = applyPaymentEdit(current, input);
+      setPayments((prev) => prev.map((p) => (p.id === input.id ? updated : p)));
+      return updated;
+    },
+    [payments, source],
+  );
+
   const submitPay = useCallback(
     async (input: {
       studentName: string;
@@ -776,6 +812,7 @@ export function useTrackerData() {
     updateLandlordProfile,
     verifyPay,
     rejectPay,
+    updatePay,
     submitPay,
     submitMaint,
     updateIssue,

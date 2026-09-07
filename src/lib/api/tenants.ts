@@ -3,7 +3,7 @@ import { getSupabase } from "../supabase";
 import { inviteStudentToPortal, normalizeEmail } from "../auth";
 import { contentTypeFor, describeStorageError, prepareUploadFile, storageObjectPath } from "../upload";
 import { findTenantByEmail, findTenantOnBed, reconcileBedSpace } from "./occupancy";
-import type { BedSpace, BillingRecord, OnboardStudentInput, Student } from "../types";
+import type { BedSpace, BillingRecord, OnboardStudentInput, RoomGender, Student } from "../types";
 
 type OnboardRpcRow = {
   tenant_id: string;
@@ -34,6 +34,7 @@ function mapOnboardRow(row: OnboardRpcRow, fallback: OnboardStudentInput): {
     email: row.email || "-",
     nrc: row.nrc ?? "-",
     moveInDate: moveIn,
+    gender: fallback.gender ?? row.room_gender,
   };
   const bed: BedSpace = {
     id: row.bed_space_id,
@@ -44,6 +45,7 @@ function mapOnboardRow(row: OnboardRpcRow, fallback: OnboardStudentInput): {
     rentAmount: rent,
     status: "occupied",
     student,
+    roomGender: row.room_gender,
   };
   const billing: BillingRecord = {
     billing_id: row.bed_space_id,
@@ -93,6 +95,7 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
     p_move_in_date: moveIn,
     p_rent_amount: input.rentAmount ?? null,
     p_target_month: getCurrentBillingMonth(),
+    p_gender: input.gender ?? null,
   });
 
   if (!error) {
@@ -151,6 +154,7 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
       email: input.email ? normalizeEmail(input.email) : null,
       nrc: input.nrc ?? "-",
       move_in_date: moveIn,
+      gender: input.gender ?? bedRow.room_gender,
     })
     .select("*")
     .single();
@@ -323,4 +327,76 @@ export async function uploadTenantMedia(tenantId: string, file: File, category: 
     if (tenantError) throw tenantError;
   }
   return data.publicUrl;
+}
+
+export async function listVacantBedsForOnboarding(gender: RoomGender): Promise<BedSpace[]> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Supabase not configured");
+
+  const { data, error } = await sb.rpc("vacant_beds_for_onboarding", { p_gender: gender });
+  if (error) throw error;
+
+  return (data ?? []).map((row: {
+    id: string;
+    block_code: BedSpace["blockCode"];
+    room_number: number;
+    bed_letter: string;
+    room_gender: BillingRecord["room_gender"];
+    rent_amount: number;
+    status: BedSpace["status"];
+    assigned?: boolean;
+  }) => ({
+    id: row.id,
+    blockCode: row.block_code,
+    roomNumber: row.room_number,
+    bedLetter: row.bed_letter,
+    identifier: row.id,
+    rentAmount: Number(row.rent_amount),
+    status: row.assigned ? "occupied" : "vacant",
+    roomGender: row.room_gender,
+  }));
+}
+
+export async function completeStudentOnboarding(input: {
+  gender: BillingRecord["room_gender"];
+  bedId: string;
+  name: string;
+  phone: string;
+  nrc?: string;
+  moveInDate: string;
+}): Promise<Student> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Supabase not configured");
+
+  const { data, error } = await sb.rpc("complete_student_onboarding", {
+    p_gender: input.gender,
+    p_bed_space_id: input.bedId,
+    p_full_name: input.name,
+    p_phone: input.phone || "",
+    p_nrc: input.nrc ?? "-",
+    p_move_in_date: input.moveInDate,
+  });
+  if (error) throw error;
+
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    tenant_id: string;
+    full_name: string;
+    phone: string | null;
+    email: string | null;
+    nrc: string | null;
+    move_in_date: string | null;
+    bed_space_id: string;
+    gender: BillingRecord["room_gender"] | null;
+  } | null;
+  if (!row) throw new Error("Onboarding did not return a student record");
+
+  return {
+    id: row.tenant_id,
+    name: row.full_name,
+    phone: row.phone || "-",
+    email: row.email || "",
+    nrc: row.nrc ?? "-",
+    moveInDate: row.move_in_date ?? input.moveInDate,
+    gender: row.gender ?? input.gender,
+  };
 }

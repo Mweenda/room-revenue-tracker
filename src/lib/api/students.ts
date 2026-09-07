@@ -10,6 +10,7 @@ export type StudentAccountRow = {
   nrc: string | null;
   move_in_date: string | null;
   profile_image_url: string | null;
+  gender: import("../types").RoomGender | null;
   bed_space_id: string | null;
   tenant_status: TenantStatus;
   status_changed_at: string | null;
@@ -21,6 +22,11 @@ export type StudentAccountRow = {
   rent_amount: number | null;
   total_balance: number | null;
   billing_status: string | null;
+  days_past_due: number | null;
+  last_payment_at: string | null;
+  last_payment_amount: number | null;
+  due_date: string | null;
+  room_gender: import("../types").RoomGender | null;
 };
 
 type BedJoin = {
@@ -30,6 +36,7 @@ type BedJoin = {
   bed_letter: string | null;
   rent_amount: number | null;
   status: string | null;
+  room_gender?: import("../types").RoomGender | null;
   billing_records: unknown;
 };
 
@@ -52,8 +59,8 @@ export async function fetchStudentAccounts(
   let query = sb
     .from("tenants")
     .select(
-      "id, full_name, email, phone, nrc, move_in_date, profile_image_url, bed_space_id, status, status_changed_at, status_reason, " +
-      "bed_spaces (id, block_code, room_number, bed_letter, rent_amount, status, billing_records (total_balance, billing_status))",
+      "id, full_name, email, phone, nrc, move_in_date, profile_image_url, gender, bed_space_id, status, status_changed_at, status_reason, " +
+      "bed_spaces (id, block_code, room_number, bed_letter, room_gender, rent_amount, status, billing_records (total_balance, billing_status, days_past_due, target_month))",
     )
     .order("full_name");
 
@@ -64,7 +71,12 @@ export async function fetchStudentAccounts(
 
   return (data ?? []).map((row: any) => {
     const bed = firstOf<BedJoin>(row.bed_spaces);
-    const billing = firstOf<{ total_balance: number | null; billing_status: string | null }>(bed?.billing_records);
+    const billing = firstOf<{
+      total_balance: number | null;
+      billing_status: string | null;
+      days_past_due: number | null;
+      target_month: string | null;
+    }>(bed?.billing_records);
 
     return {
       id: row.id,
@@ -74,6 +86,7 @@ export async function fetchStudentAccounts(
       nrc: row.nrc ?? null,
       move_in_date: row.move_in_date ?? null,
       profile_image_url: row.profile_image_url ?? null,
+      gender: row.gender ?? bed?.room_gender ?? null,
       bed_space_id: row.bed_space_id ?? null,
       tenant_status: (row.status ?? "active") as TenantStatus,
       status_changed_at: row.status_changed_at ?? null,
@@ -85,6 +98,11 @@ export async function fetchStudentAccounts(
       rent_amount: bed?.rent_amount ?? null,
       total_balance: billing?.total_balance ?? null,
       billing_status: billing?.billing_status ?? null,
+      days_past_due: billing?.days_past_due ?? null,
+      last_payment_at: null,
+      last_payment_amount: null,
+      due_date: null,
+      room_gender: bed?.room_gender ?? null,
     };
   });
 }

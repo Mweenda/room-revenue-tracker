@@ -6,8 +6,8 @@ export const STUDENT_APK_MANIFEST = "android/latest.json";
 export const STUDENT_APP_ID = "com.roomrevenue.student";
 export const STUDENT_PORTAL_START = "student";
 /** Keep in sync with apps/student_app/pubspec.yaml `version`. */
-export const STUDENT_APP_VERSION_NAME = "1.1.2";
-export const STUDENT_APP_VERSION_CODE = 4;
+export const STUDENT_APP_VERSION_NAME = "1.1.3";
+export const STUDENT_APP_VERSION_CODE = 5;
 
 export function studentApkReleaseObject(versionName = STUDENT_APP_VERSION_NAME, versionCode = STUDENT_APP_VERSION_CODE): string {
   return `android/releases/${versionName}+${versionCode}/room-revenue-student.apk`;

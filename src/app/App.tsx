@@ -15,6 +15,7 @@ import { formatHeaderDateTime, useLiveDateTime } from "../hooks/useLiveDateTime"
 import { isBedAssignable, type OccupancyIssue } from "../lib/occupancy";
 import { LandingPage } from "../components/LandingPage";
 import { StudentLogin } from "../components/StudentLogin";
+import StudentOnboarding from "../components/StudentOnboarding";
 import { LandlordLogin } from "../components/LandlordLogin";
 import { AdminLogin } from "../components/AdminLogin";
 import { AdminDashboard } from "../components/AdminDashboard";
@@ -50,6 +51,7 @@ import type {
   MaintenanceIssue,
   OnboardStudentInput,
   Payment,
+  PaymentMethod,
   PayStatus,
   StudentView,
   TenantStatus,
@@ -1394,16 +1396,29 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
 
 // ─── Pay View ────────────────────────────────────────────────────────────────
 
-function PayView({ payments, beds, verifyPay, rejectPay }: {
+function PayView({ payments, beds, verifyPay, rejectPay, updatePay }: {
   payments: Payment[];
   beds: BedSpace[];
   verifyPay: (id: string) => Promise<void>;
   rejectPay: (id: string, reason: string) => Promise<void>;
+  updatePay: (input: {
+    id: string;
+    studentName: string;
+    bedSpaceId: string;
+    amount: number;
+    method: PaymentMethod;
+    transactionRef: string;
+    submittedAt: string;
+  }) => Promise<unknown>;
 }) {
   const [filter, setFilter] = useState<PayStatus | "all">("pending");
   const [rejectModal, setRejectModal] = useState<{ id: string } | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [viewReceipt, setViewReceipt] = useState<Payment | null>(null);
+  const [editTarget, setEditTarget] = useState<Payment | null>(null);
+  const [editForm, setEditForm] = useState({ studentName: "", bedSpaceId: "", amount: "", method: "Airtel" as PaymentMethod, transactionRef: "", submittedAt: "" });
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
 
   const filtered = payments.filter((p) => filter === "all" || p.status === filter);
   const pendingCount = payments.filter((p) => p.status === "pending").length;
@@ -1416,6 +1431,41 @@ function PayView({ payments, beds, verifyPay, rejectPay }: {
     if (!rejectModal) return;
     await rejectPay(rejectModal.id, rejectReason);
     setRejectModal(null); setRejectReason("");
+  }
+
+  function openEdit(payment: Payment) {
+    setEditTarget(payment);
+    setEditError(null);
+    setEditForm({
+      studentName: payment.studentName,
+      bedSpaceId: payment.bedSpaceId,
+      amount: String(payment.amount),
+      method: payment.method,
+      transactionRef: payment.transactionRef,
+      submittedAt: payment.submittedAt,
+    });
+  }
+
+  async function saveEdit() {
+    if (!editTarget) return;
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      await updatePay({
+        id: editTarget.id,
+        studentName: editForm.studentName,
+        bedSpaceId: editForm.bedSpaceId,
+        amount: Number(editForm.amount),
+        method: editForm.method,
+        transactionRef: editForm.transactionRef,
+        submittedAt: editForm.submittedAt,
+      });
+      setEditTarget(null);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Could not save the payment");
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   const blockProgress = BLOCKS.map((code) => {
@@ -1484,6 +1534,7 @@ function PayView({ payments, beds, verifyPay, rejectPay }: {
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-1.5 justify-end">
                       <button onClick={() => setViewReceipt(p)} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-all" title="View"><Eye size={14} /></button>
+                      <button onClick={() => openEdit(p)} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-all" title="Edit payment"><Edit3 size={14} /></button>
                       {p.status === "pending" && (
                         <>
                           <button onClick={() => verify(p.id)} className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-all" title="Verify"><Check size={14} /></button>
@@ -1505,7 +1556,11 @@ function PayView({ payments, beds, verifyPay, rejectPay }: {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setViewReceipt(null)} />
           <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full space-y-4">
             <div className="flex items-center justify-between"><h3 className="font-bold text-slate-900">Payment Receipt</h3><button onClick={() => setViewReceipt(null)}><X size={18} className="text-slate-500" /></button></div>
-            <div className="bg-slate-100 rounded-xl h-40 flex items-center justify-center"><div className="text-center text-slate-400"><CreditCard size={28} className="mx-auto mb-2 opacity-50" /><p className="text-xs font-mono">{viewReceipt.transactionRef}</p></div></div>
+            <div className="bg-slate-100 rounded-xl h-40 flex items-center justify-center overflow-hidden">
+              {viewReceipt.proofUrl
+                ? <img src={viewReceipt.proofUrl} alt="Payment proof" className="w-full h-full object-contain" />
+                : <div className="text-center text-slate-400"><CreditCard size={28} className="mx-auto mb-2 opacity-50" /><p className="text-xs font-mono">{viewReceipt.transactionRef}</p></div>}
+            </div>
             <div className="space-y-1">
               <InfoRow label="Student" value={viewReceipt.studentName} />
               <InfoRow label="Bed Space" value={viewReceipt.bedSpaceId} mono />
@@ -1527,6 +1582,46 @@ function PayView({ payments, beds, verifyPay, rejectPay }: {
             <div className="flex gap-3">
               <button onClick={() => setRejectModal(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
               <button onClick={reject} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition-colors">Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setEditTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h3 className="font-bold text-slate-900">Edit payment</h3>
+            <p className="text-sm text-slate-500">Manually correct amount, method, reference, date, or the assigned bed.</p>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Student
+              <input value={editForm.studentName} onChange={(e) => setEditForm((f) => ({ ...f, studentName: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+            </label>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Bed space
+              <select value={editForm.bedSpaceId} onChange={(e) => setEditForm((f) => ({ ...f, bedSpaceId: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white">
+                {beds.map((bed) => <option key={bed.id} value={bed.id}>{bed.id}{bed.student ? ` · ${bed.student.name}` : ""}</option>)}
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Amount (K)
+                <input type="number" min="1" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+              </label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Method
+                <select value={editForm.method} onChange={(e) => setEditForm((f) => ({ ...f, method: e.target.value as PaymentMethod }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white">
+                  <option>Airtel</option>
+                  <option>MTN</option>
+                </select>
+              </label>
+            </div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Reference
+              <input value={editForm.transactionRef} onChange={(e) => setEditForm((f) => ({ ...f, transactionRef: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+            </label>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Date
+              <input type="date" value={editForm.submittedAt} onChange={(e) => setEditForm((f) => ({ ...f, submittedAt: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+            </label>
+            {editError && <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{editError}</p>}
+            <div className="flex gap-3">
+              <button onClick={() => setEditTarget(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+              <button onClick={() => void saveEdit()} disabled={editSaving} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50">{editSaving ? "Saving…" : "Save changes"}</button>
             </div>
           </div>
         </div>
@@ -1927,9 +2022,9 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
                       <Field label="Amount (K)" value={payForm.amount} onChange={(v) => setPayForm((f) => ({ ...f, amount: v }))} type="number" />
                     </div>
                     <Field label="Transaction Reference *" value={payForm.ref} onChange={(v) => setPayForm((f) => ({ ...f, ref: v }))} placeholder="TXN-AIRTL-0000" />
-                    <div onClick={() => payFileRef.current?.click()} className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-5 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30 transition-all duration-150 group">
+                    <div onClick={() => { if (payFileRef.current) payFileRef.current.value = ""; payFileRef.current?.click(); }} className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-5 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30 transition-all duration-150 group">
                       <Upload size={20} className="mx-auto text-slate-400 mb-1 group-hover:text-emerald-500 transition-colors" />
-                      <p className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-emerald-600">{payFileName || "Click to upload receipt (JPEG/PNG)"}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-emerald-600">{payFileName || "Select a receipt photo from your device"}</p>
                       <input ref={payFileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) { setPayFile(file); setPayFileName(file.name); } }} />
                     </div>
                     {payError && (
@@ -1962,9 +2057,9 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
                         <button onClick={() => { setMainImagePreview(null); setMainImageUrl(undefined); }} className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-colors"><X size={13} /></button>
                       </div>
                     ) : (
-                      <div onClick={() => mainFileRef.current?.click()} className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-5 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30 transition-all duration-150 group">
+                      <div onClick={() => { if (mainFileRef.current) mainFileRef.current.value = ""; mainFileRef.current?.click(); }} className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-5 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30 transition-all duration-150 group">
                         <Camera size={18} className="mx-auto text-slate-400 mb-1 group-hover:text-emerald-500 transition-colors" />
-                        <p className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-emerald-600">Upload damage photo</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-emerald-600">Select a damage photo from your device</p>
                       </div>
                     )}
                     <input ref={mainFileRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
@@ -2035,7 +2130,7 @@ const BOTTOM_NAV: { id: LandlordView; label: string; icon: React.ElementType }[]
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudent, updateStudentAccount, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, saveUtility, toggleSettled, updateIssueStatus, runOccupancyAudit, reconcileOccupancy }: {
+function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudent, updateStudentAccount, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, updatePay, saveUtility, toggleSettled, updateIssueStatus, runOccupancyAudit, reconcileOccupancy }: {
   beds: BedSpace[];
   billingRecords: BillingRecord[];
   billingMap: Map<string, BillingRecord>;
@@ -2055,6 +2150,15 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   applyRentIncrement: ApplyRentIncrementFn;
   verifyPay: (id: string) => Promise<void>;
   rejectPay: (id: string, reason: string) => Promise<void>;
+  updatePay: (input: {
+    id: string;
+    studentName: string;
+    bedSpaceId: string;
+    amount: number;
+    method: PaymentMethod;
+    transactionRef: string;
+    submittedAt: string;
+  }) => Promise<unknown>;
   saveUtility: (blockCode: BlockCode, month: string, totalCost: number) => Promise<unknown>;
   toggleSettled: (blockCode: BlockCode, month: string, name: string) => Promise<void>;
   updateIssueStatus: (id: string, status: IssueStatus, resolutionNote?: string) => Promise<void>;
@@ -2141,9 +2245,9 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
           )}
           {view === "portal"    && <PortalView beds={beds} billingMap={monthBillingMap} billingMonth={billingMonth} onBillingMonthChange={setBillingMonth} onboard={onboard} updateStudent={updateStudent} vacateBed={vacateBed} />}
           {view === "revenue"   && <RevenueView billingRecords={billingRecords} billingMonth={billingMonth} onBillingMonthChange={setBillingMonth} />}
-          {view === "pay"       && <PayView payments={payments} beds={beds} verifyPay={verifyPay} rejectPay={rejectPay} />}
+          {view === "pay"       && <PayView payments={payments} beds={beds} verifyPay={verifyPay} rejectPay={rejectPay} updatePay={updatePay} />}
           {view === "utilities" && <UtilitiesView utilities={utilities} beds={beds} saveUtility={saveUtility} toggleSettled={toggleSettled} />}
-          {view === "students"  && <StudentsView students={students} beds={beds} canManage={canManage} onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }} updateStudentAccount={updateStudentAccount} evictStudent={evictStudent} applyRentIncrement={applyRentIncrement} runOccupancyAudit={runOccupancyAudit} reconcileOccupancy={reconcileOccupancy} />}
+          {view === "students"  && <StudentsView students={students} beds={beds} billingRecords={billingRecords} canManage={canManage} onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }} updateStudentAccount={updateStudentAccount} evictStudent={evictStudent} applyRentIncrement={applyRentIncrement} runOccupancyAudit={runOccupancyAudit} reconcileOccupancy={reconcileOccupancy} />}
           {view === "reports"   && <ReportsView issues={issues} payments={payments} beds={beds} billingRecords={billingRecords} utilities={utilities} canExport={canManage} updateIssueStatus={updateIssueStatus} />}
           {view === "profile"   && <LandlordProfile beds={beds} billingRecords={billingRecords} landlord={landlord} onSave={onLandlordProfileSave} />}
           {view === "settings"  && <LandlordSettings landlord={landlord} onProfileSave={onLandlordProfileSave} />}
@@ -2416,7 +2520,7 @@ function AppRoutes() {
   }
 
   if (view === "student-confirm") {
-    return <StudentEmailConfirmation onBackToLogin={() => setView("student-login")} onLoginSuccess={handleStudentLoginSuccess} />;
+    return <StudentOnboarding onLoginSuccess={handleStudentLoginSuccess} />;
   }
 
   if (view === "student-reset") {
@@ -2485,6 +2589,7 @@ function AppRoutes() {
       vacateBed={tracker.vacateBed}
       verifyPay={tracker.verifyPay}
       rejectPay={tracker.rejectPay}
+      updatePay={tracker.updatePay}
       saveUtility={tracker.saveUtility}
       toggleSettled={tracker.toggleSettled}
       updateIssueStatus={tracker.updateIssue}

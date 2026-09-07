@@ -29,7 +29,7 @@ function versionFromPubspec() {
   } catch {
     // Fall through.
   }
-  return { versionName: "1.1.2", versionCode: 4 };
+  return { versionName: "1.1.3", versionCode: 5 };
 }
 
 const { versionName, versionCode } = versionFromPubspec();

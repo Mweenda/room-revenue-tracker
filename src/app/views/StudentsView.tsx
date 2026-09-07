@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Mail,
+  MessageCircle,
   Pencil,
   Phone,
   Plus,
@@ -40,12 +41,15 @@ import {
 import OccupancyAuditPanel from "../components/OccupancyAuditPanel";
 import RentIncrementDialog, { type ApplyRentIncrementResult } from "../components/RentIncrementDialog";
 import StudentAccountDialog from "../components/StudentAccountDialog";
+import WhatsAppGateway from "../components/WhatsAppGateway";
+import RentDueCalendar from "../components/RentDueCalendar";
 import { BLOCKS, fmtKwacha } from "../../lib/billing";
 import { bedLabel, matchesStudentSearch, TENANT_STATUS_LABEL } from "../../lib/students";
+import { composeRentReminder, whatsappChatUrl } from "../../lib/whatsapp";
 import type { StudentAccountRow } from "../../lib/api/students";
 import type { OccupancyIssue } from "../../lib/occupancy";
 import type { RentIncreaseMode, RentScope } from "../../lib/rent";
-import type { BedSpace, BillingStatus, BlockCode, OnboardStudentInput, TenantStatus, UpdateStudentAccountInput } from "../../lib/types";
+import type { BedSpace, BillingRecord, BillingStatus, BlockCode, OnboardStudentInput, RoomGender, TenantStatus, UpdateStudentAccountInput } from "../../lib/types";
 
 const billingBadge: Record<string, string> = {
   "Open Window": "bg-emerald-100 text-emerald-800",
@@ -77,6 +81,7 @@ export type EvictionResult = {
 export default function StudentsView({
   students,
   beds,
+  billingRecords,
   canManage,
   onboardStudent,
   updateStudentAccount,
@@ -87,6 +92,7 @@ export default function StudentsView({
 }: {
   students: StudentAccountRow[];
   beds: BedSpace[];
+  billingRecords: BillingRecord[];
   canManage: boolean;
   onboardStudent: (input: OnboardStudentInput) => Promise<unknown>;
   updateStudentAccount: (input: UpdateStudentAccountInput) => Promise<unknown>;
@@ -108,6 +114,9 @@ export default function StudentsView({
   const [blockFilter, setBlockFilter] = useState<BlockCode | "all">("all");
   const [billingFilter, setBillingFilter] = useState<BillingStatus | "all">("all");
   const [statusFilter, setStatusFilter] = useState<TenantStatus | "all">("active");
+  const [genderFilter, setGenderFilter] = useState<RoomGender | "all">("all");
+  const [calendarDate, setCalendarDate] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<StudentAccountRow | null>(null);
   const [rentDialogOpen, setRentDialogOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -125,16 +134,41 @@ export default function StudentsView({
       matchesStudentSearch(row, search) &&
       (blockFilter === "all" || row.block_code === blockFilter) &&
       (billingFilter === "all" || row.billing_status === billingFilter) &&
-      (statusFilter === "all" || row.tenant_status === statusFilter),
+      (statusFilter === "all" || row.tenant_status === statusFilter) &&
+      (genderFilter === "all" || row.gender === genderFilter || row.room_gender === genderFilter) &&
+      (!calendarDate || row.due_date === calendarDate),
     ),
-    [students, search, blockFilter, billingFilter, statusFilter],
+    [students, search, blockFilter, billingFilter, statusFilter, genderFilter, calendarDate],
   );
 
   const activeStudents = students.filter((row) => row.tenant_status === "active");
   const overdue = activeStudents.filter((row) => row.billing_status === "OVERDUE / UNPAID");
   const totalOutstanding = activeStudents.reduce((sum, row) => sum + (row.total_balance ?? 0), 0);
   const removedCount = students.length - activeStudents.length;
-  const filtersActive = search !== "" || blockFilter !== "all" || billingFilter !== "all" || statusFilter !== "active";
+  const filtersActive = search !== "" || blockFilter !== "all" || billingFilter !== "all" || statusFilter !== "active" || genderFilter !== "all" || Boolean(calendarDate);
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((row) => selectedIds.has(row.id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectFiltered() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        for (const row of filtered) next.delete(row.id);
+      } else {
+        for (const row of filtered) next.add(row.id);
+      }
+      return next;
+    });
+  }
 
   function openCreate() {
     setFormMode("create");
@@ -201,7 +235,8 @@ export default function StudentsView({
       <SectionCard
         title="Students"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <WhatsAppGateway students={filtered} selectedIds={selectedIds} />
             <button
               onClick={openCreate}
               disabled={!canManage}
@@ -222,7 +257,7 @@ export default function StudentsView({
         }
       >
         <div className="p-5 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="relative sm:col-span-2">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
@@ -254,6 +289,17 @@ export default function StudentsView({
                 <option key={status} value={status}>{status === "all" ? "All billing statuses" : status}</option>
               ))}
             </select>
+
+            <select
+              value={genderFilter}
+              onChange={(e) => setGenderFilter(e.target.value as RoomGender | "all")}
+              className={inputStyles}
+              aria-label="Filter by gender"
+            >
+              <option value="all">All genders</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -273,7 +319,7 @@ export default function StudentsView({
 
             {filtersActive && (
               <button
-                onClick={() => { setSearch(""); setBlockFilter("all"); setBillingFilter("all"); setStatusFilter("active"); }}
+                onClick={() => { setSearch(""); setBlockFilter("all"); setBillingFilter("all"); setStatusFilter("active"); setGenderFilter("all"); setCalendarDate(null); }}
                 className="text-xs font-semibold text-slate-500 hover:text-slate-900 inline-flex items-center gap-1 transition-colors"
               >
                 <X size={12} /> Clear
@@ -281,15 +327,28 @@ export default function StudentsView({
             )}
           </div>
 
+          <RentDueCalendar billingRecords={billingRecords} selectedDate={calendarDate} onSelectDate={setCalendarDate} />
+
           <div className="border border-slate-100 rounded-xl">
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={toggleSelectFiltered}
+                      aria-label="Select filtered students"
+                    />
+                  </TableHead>
                   <TableHead className="text-xs uppercase tracking-wide">Student</TableHead>
                   <TableHead className="text-xs uppercase tracking-wide hidden md:table-cell">Contact</TableHead>
                   <TableHead className="text-xs uppercase tracking-wide">Bed</TableHead>
+                  <TableHead className="text-xs uppercase tracking-wide hidden lg:table-cell">Gender</TableHead>
                   <TableHead className="text-xs uppercase tracking-wide text-right hidden sm:table-cell">Rent</TableHead>
                   <TableHead className="text-xs uppercase tracking-wide text-right">Balance</TableHead>
+                  <TableHead className="text-xs uppercase tracking-wide text-right hidden md:table-cell">Days past due</TableHead>
+                  <TableHead className="text-xs uppercase tracking-wide hidden lg:table-cell">Last payment</TableHead>
                   <TableHead className="text-xs uppercase tracking-wide">Status</TableHead>
                   <TableHead className="text-xs uppercase tracking-wide text-right">Actions</TableHead>
                 </TableRow>
@@ -297,6 +356,14 @@ export default function StudentsView({
               <TableBody>
                 {filtered.map((row) => (
                   <TableRow key={row.id} className={`${HOVER_ROW} cursor-pointer`} onClick={() => setDetail(row)}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => toggleSelected(row.id)}
+                        aria-label={`Select ${row.full_name}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <p className="font-semibold text-slate-900">{row.full_name}</p>
                       <p className="text-xs text-slate-400 md:hidden">{row.email ?? "No email"}</p>
@@ -309,22 +376,58 @@ export default function StudentsView({
                       <p className="text-xs text-slate-400">{row.phone ?? "-"}</p>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-slate-500">{bedLabel(row)}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-xs font-semibold">
+                      <span className={row.gender === "Female" || row.room_gender === "Female" ? "text-pink-600" : "text-blue-600"}>
+                        {row.gender ?? row.room_gender ?? "-"}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right hidden sm:table-cell">
                       {row.rent_amount != null ? fmtKwacha(row.rent_amount) : "-"}
                     </TableCell>
                     <TableCell className={`text-right font-semibold ${(row.total_balance ?? 0) > 0 ? "text-red-600" : "text-slate-500"}`}>
                       {row.total_balance != null ? fmtKwacha(row.total_balance) : "-"}
                     </TableCell>
+                    <TableCell className={`text-right hidden md:table-cell font-semibold ${(row.days_past_due ?? 0) > 5 ? "text-red-600" : (row.days_past_due ?? 0) > 0 ? "text-amber-600" : "text-slate-500"}`}>
+                      {row.days_past_due ?? 0}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-xs text-slate-600">
+                      {row.last_payment_at
+                        ? `${row.last_payment_at}${row.last_payment_amount != null ? ` · ${fmtKwacha(row.last_payment_amount)}` : ""}`
+                        : "—"}
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1 items-start">
                         {row.tenant_status === "active"
                           ? <Badge label={row.billing_status ?? "Unknown"} className={billingBadge[row.billing_status ?? ""] ?? "bg-slate-100 text-slate-600"} />
                           : <Badge label={TENANT_STATUS_LABEL[row.tenant_status]} className={tenantStatusBadge[row.tenant_status]} />}
-                      </div>
+                    </div>
                     </TableCell>
                     <TableCell className="text-right">
                       {row.tenant_status === "active" ? (
                         <div className="inline-flex items-center justify-end gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              try {
+                                const url = whatsappChatUrl(row.phone ?? "", composeRentReminder({
+                                  name: row.full_name,
+                                  bedLabel: bedLabel(row),
+                                  balance: row.total_balance ?? 0,
+                                  dueDate: row.due_date ?? "the 1st of the month",
+                                  daysPastDue: row.days_past_due ?? 0,
+                                  status: row.billing_status,
+                                }));
+                                const opened = window.open(url, "_blank", "noopener,noreferrer");
+                                if (!opened) window.location.href = url;
+                              } catch (err) {
+                                toast.error(err instanceof Error ? err.message : "Could not open WhatsApp");
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                            title="Remind via WhatsApp"
+                          >
+                            <MessageCircle size={13} />
+                          </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); openEdit(row); }}
                             disabled={!canManage}
@@ -353,7 +456,7 @@ export default function StudentsView({
 
                 {filtered.length === 0 && (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={7} className="py-12 text-center text-sm text-slate-400">
+                    <TableCell colSpan={11} className="py-12 text-center text-sm text-slate-400">
                       No students match these filters.
                     </TableCell>
                   </TableRow>
@@ -425,9 +528,15 @@ export default function StudentsView({
               <div className="grid grid-cols-2 gap-3">
                 {[
                   ["NRC", detail.nrc ?? "-"],
+                  ["Gender", detail.gender ?? detail.room_gender ?? "-"],
                   ["Move-in", detail.move_in_date ?? "-"],
                   ["Monthly rent", detail.rent_amount != null ? fmtKwacha(detail.rent_amount) : "-"],
                   ["Balance", detail.total_balance != null ? fmtKwacha(detail.total_balance) : "-"],
+                  ["Days past due", String(detail.days_past_due ?? 0)],
+                  ["Due date", detail.due_date ?? "-"],
+                  ["Last payment", detail.last_payment_at
+                    ? `${detail.last_payment_at}${detail.last_payment_amount != null ? ` · ${fmtKwacha(detail.last_payment_amount)}` : ""}`
+                    : "None recorded"],
                 ].map(([label, value]) => (
                   <div key={label} className="bg-slate-50 rounded-xl p-3">
                     <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">{label}</p>
