@@ -1,9 +1,10 @@
 import type { StudentAccountRow } from "./api/students";
-import type { BedSpace, BillingRecord, Payment, TenantStatus, UpdateStudentAccountInput } from "./types";
-import { bedHasTenant } from "./occupancy";
+import type { BedSpace, BillingRecord, ManualPaymentInput, Payment, TenantStatus, UpdateStudentAccountInput } from "./types";
+import { assertUniqueActivePhone, bedHasTenant } from "./occupancy";
 import { lastVerifiedPayment } from "./paymentsEdit";
+import { applyPaymentToLedger } from "./paymentTracking";
 import { rentDueDateIso } from "./rentDue";
-import { getCurrentYear } from "./billing";
+import { getCurrentYear, refreshBillingRecord } from "./billing";
 
 /**
  * Builds the Students page rows from in-memory beds and billing, so the page
@@ -104,6 +105,13 @@ export function applyStudentAccountUpdate(
     if (clash) throw new Error(`This email is already assigned to bed ${clash.id}`);
   }
 
+  assertUniqueActivePhone(beds, input.phone, input.tenantId);
+
+  const gender = input.gender ?? currentBed.student.gender ?? targetBed.roomGender;
+  if (gender && targetBed.roomGender && gender !== targetBed.roomGender) {
+    throw new Error(`Student gender must match the bed space (${targetBed.roomGender})`);
+  }
+
   const student = {
     ...currentBed.student,
     name,
@@ -111,6 +119,7 @@ export function applyStudentAccountUpdate(
     email: input.email.trim() || "-",
     nrc: input.nrc?.trim() || currentBed.student.nrc,
     moveInDate: input.moveInDate || currentBed.student.moveInDate,
+    gender,
   };
 
   const oldBilling = billingRecords.find((record) => record.billing_id === currentBed.id);
@@ -162,6 +171,53 @@ export function applyStudentAccountUpdate(
   return { beds: nextBeds, billingRecords: nextBilling };
 }
 
+export function applyManualVerifiedPayment(
+  billingRecords: BillingRecord[],
+  payments: Payment[],
+  input: {
+    bedSpaceId: string;
+    studentName: string;
+    payment: ManualPaymentInput;
+  },
+): { billingRecords: BillingRecord[]; payments: Payment[] } {
+  const amount = Number(input.payment.amount);
+  if (!(amount > 0)) throw new Error("Payment amount must be greater than zero");
+  const submittedAt = input.payment.submittedAt || new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(submittedAt)) throw new Error("Use a valid payment date");
+  const method = input.payment.method;
+  if (method !== "Airtel" && method !== "MTN" && method !== "Cash") {
+    throw new Error("Choose Airtel, MTN, or Cash");
+  }
+
+  const payment: Payment = {
+    id: `p-manual-${Date.now()}`,
+    studentName: input.studentName.trim(),
+    bedSpaceId: input.bedSpaceId,
+    amount,
+    method,
+    transactionRef: input.payment.transactionRef?.trim() || `CASH-${submittedAt.replace(/-/g, "")}`,
+    submittedAt,
+    status: "verified",
+  };
+
+  const nextBilling = billingRecords.map((record) => {
+    if (record.billing_id !== input.bedSpaceId) return record;
+    const ledger = applyPaymentToLedger({
+      totalBalance: record.total_balance,
+      currentRent: record.current_rent,
+      targetMonth: record.target_month,
+      amount,
+    });
+    return refreshBillingRecord({
+      ...record,
+      total_balance: ledger.totalBalance,
+      target_month: ledger.targetMonth,
+    });
+  });
+
+  return { billingRecords: nextBilling, payments: [payment, ...payments] };
+}
+
 export function enrichStudentAccounts(
   rows: StudentAccountRow[],
   payments: Payment[],
@@ -176,10 +232,12 @@ export function enrichStudentAccounts(
     return {
       ...row,
       gender: row.gender ?? billing?.room_gender ?? row.room_gender ?? null,
-      days_past_due: row.days_past_due ?? billing?.days_past_due ?? null,
+      total_balance: billing?.total_balance ?? row.total_balance ?? null,
+      billing_status: billing?.billing_status ?? row.billing_status ?? null,
+      days_past_due: billing?.days_past_due ?? row.days_past_due ?? null,
       last_payment_at: last?.submittedAt ?? row.last_payment_at ?? null,
       last_payment_amount: last?.amount ?? row.last_payment_amount ?? null,
-      due_date: row.due_date ?? rentDueDateIso(targetMonth ?? "-", year),
+      due_date: rentDueDateIso(targetMonth ?? "-", year) ?? row.due_date,
       room_gender: row.room_gender ?? billing?.room_gender ?? null,
     };
   });

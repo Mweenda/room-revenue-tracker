@@ -33,6 +33,29 @@ test("the student shell is detected from the app launch query", () => {
   assert.equal(app.studentPortalLaunchParam("app=landlord"), false);
 });
 
+test("the student APK stays on /student so it never opens the landlord landing page", () => {
+  assert.equal(app.isStudentPortalPath("/student"), true);
+  assert.equal(app.isStudentPortalPath("/student/"), true);
+  assert.equal(app.isStudentPortalPath("/"), false);
+  assert.equal(app.isStudentPortalPath("/students"), false);
+  assert.equal(app.isStudentShellUserAgent("Mozilla/5.0 RoomRevenueStudent/1.1.3"), true);
+  assert.equal(app.isStudentShellUserAgent("Mozilla/5.0 Chrome/122.0.0.0"), false);
+  assert.equal(app.detectStudentNativeShell({
+    pathname: "/student", search: "", userAgent: "", capacitorNative: false, storage: null,
+  }), true);
+  assert.equal(app.detectStudentNativeShell({
+    pathname: "/", search: "", userAgent: "", capacitorNative: false, storage: null,
+  }), false);
+  assert.equal(app.detectStudentNativeShell({
+    pathname: "/", search: "", userAgent: "RoomRevenueStudent/1.1.3", capacitorNative: false, storage: null,
+  }), true);
+  assert.equal(app.studentShellLocation("/", "?app=student"), "/student");
+  assert.equal(app.studentShellLocation("/", "app=student&auth=student-confirm"), "/student?auth=student-confirm");
+  assert.equal(app.studentShellLocation("/student", "", { auth: "student-reset" }), "/student?auth=student-reset");
+  assert.equal(app.studentShellLocation("/", "", { auth: "student-confirm" }), "/?auth=student-confirm");
+  assert.equal(app.studentShellLocation("/", "", {}, true), "/student");
+});
+
 test("the welcome ad shows once per student and skips guests", () => {
   const memory = new Map();
   const storage = {

@@ -2,10 +2,17 @@ import { getSupabase } from "../supabase";
 import type { BillingRecord } from "../types";
 import { mapBilling } from "./mappers";
 import { refreshBillingRecords } from "../billing";
+import { rollBillingRecords } from "../paymentTracking";
 
 export async function fetchBillingRecords(): Promise<BillingRecord[]> {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
+
+  try {
+    await sb.rpc("roll_billing_cycle");
+  } catch {
+    // RPC ships with migration 018; the client still rolls the fetched snapshot.
+  }
 
   try {
     await sb.rpc("sync_billing_due_dates");
@@ -21,5 +28,5 @@ export async function fetchBillingRecords(): Promise<BillingRecord[]> {
     .order("bed_space");
 
   if (error) throw error;
-  return refreshBillingRecords((data ?? []).map(mapBilling));
+  return refreshBillingRecords(rollBillingRecords((data ?? []).map(mapBilling)));
 }

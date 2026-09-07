@@ -14,7 +14,9 @@ export function applyPaymentEdit(payment: Payment, input: PaymentEditInput): Pay
   if (!input.transactionRef.trim()) throw new Error("A transaction reference is required");
   if (!input.studentName.trim()) throw new Error("A student name is required");
   if (!input.bedSpaceId.trim()) throw new Error("A bed space is required");
-  if (input.method !== "Airtel" && input.method !== "MTN") throw new Error("Choose Airtel or MTN");
+  if (input.method !== "Airtel" && input.method !== "MTN" && input.method !== "Cash") {
+    throw new Error("Choose Airtel, MTN, or Cash");
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.submittedAt)) throw new Error("Use a valid payment date");
 
   return {

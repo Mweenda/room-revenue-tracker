@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { applyStudentAccountUpdate, deriveStudentAccounts } =
+const { applyStudentAccountUpdate, applyManualVerifiedPayment, deriveStudentAccounts } =
   await import('../src/lib/students.ts');
 
 function student(id, name, email) {
@@ -9,8 +9,8 @@ function student(id, name, email) {
 }
 
 const BEDS = [
-  { id: 'BBH-1-A', blockCode: 'BBH', roomNumber: 1, bedLetter: 'A', identifier: 'BBH-1-A', status: 'occupied', rentAmount: 900, student: student('t1', 'Ada Lovelace', 'ada@example.com') },
-  { id: 'BBH-1-B', blockCode: 'BBH', roomNumber: 1, bedLetter: 'B', identifier: 'BBH-1-B', status: 'vacant', rentAmount: 850 },
+  { id: 'BBH-1-A', blockCode: 'BBH', roomNumber: 1, bedLetter: 'A', identifier: 'BBH-1-A', status: 'occupied', rentAmount: 900, roomGender: 'Female', student: student('t1', 'Ada Lovelace', 'ada@example.com') },
+  { id: 'BBH-1-B', blockCode: 'BBH', roomNumber: 1, bedLetter: 'B', identifier: 'BBH-1-B', status: 'vacant', rentAmount: 850, roomGender: 'Female' },
 ];
 
 const BILLING = [
@@ -83,4 +83,57 @@ test('cannot move onto a bed that already has a tenant', () => {
     }),
     /already occupied/,
   );
+});
+
+test('cannot move a student onto a bed of the opposite gender', () => {
+  const mixed = [
+    BEDS[0],
+    { ...BEDS[1], roomGender: 'Male' },
+  ];
+  assert.throws(
+    () => applyStudentAccountUpdate(mixed, BILLING, {
+      tenantId: 't1',
+      name: 'Ada Lovelace',
+      phone: '0970000000',
+      email: 'ada@example.com',
+      moveInDate: '2026-02-01',
+      bedSpaceId: 'BBH-1-B',
+      rentAmount: 850,
+      gender: 'Female',
+    }),
+    /match the bed space/,
+  );
+});
+
+test('cannot reuse another active student phone', () => {
+  const occupied = [
+    BEDS[0],
+    { ...BEDS[1], status: 'occupied', student: student('t2', 'Grace Hopper', 'grace@example.com') },
+  ];
+  occupied[1].student.phone = '0971111111';
+  assert.throws(
+    () => applyStudentAccountUpdate(occupied, BILLING, {
+      tenantId: 't1',
+      name: 'Ada Lovelace',
+      phone: '0971111111',
+      email: 'ada@example.com',
+      moveInDate: '2026-02-01',
+      bedSpaceId: 'BBH-1-A',
+      rentAmount: 900,
+    }),
+    /already assigned/,
+  );
+});
+
+test('a landlord cash receipt applies to the billing ledger', () => {
+  const paid = applyManualVerifiedPayment(BILLING, [], {
+    bedSpaceId: 'BBH-1-A',
+    studentName: 'Ada Lovelace',
+    payment: { amount: 450, submittedAt: '2026-09-07', method: 'Cash', transactionRef: 'RCPT-1' },
+  });
+  const billing = paid.billingRecords.find((row) => row.billing_id === 'BBH-1-A');
+  assert.equal(billing?.total_balance, 0);
+  assert.equal(paid.payments[0].status, 'verified');
+  assert.equal(paid.payments[0].method, 'Cash');
+  assert.equal(paid.payments[0].amount, 450);
 });

@@ -1,14 +1,4 @@
 import { getSupabase } from "../supabase";
-import type { OccupancyIssue } from "../occupancy";
-
-export async function auditOccupancy(): Promise<OccupancyIssue[]> {
-  const sb = getSupabase();
-  if (!sb) throw new Error("Supabase not configured");
-
-  const { data, error } = await sb.rpc("audit_occupancy");
-  if (error) throw error;
-  return (data ?? []) as OccupancyIssue[];
-}
 
 export async function reconcileBedSpace(bedId: string): Promise<void> {
   const sb = getSupabase();

@@ -52,6 +52,14 @@ test('an evicted student no longer counts as an occupancy conflict', () => {
   assert.deepEqual(issues, []);
 });
 
+test('occupied seed beds do not share phone numbers', async () => {
+  const { BILLING_RECORDS } = await import('../src/data/seed.ts');
+  const phones = BILLING_RECORDS
+    .filter((row) => row.phone_number && row.phone_number !== '-')
+    .map((row) => row.phone_number);
+  assert.equal(new Set(phones).size, phones.length);
+});
+
 test('search matches name, email, phone, NRC and bed label', () => {
   const [row] = deriveStudentAccounts(BEDS, BILLING);
 

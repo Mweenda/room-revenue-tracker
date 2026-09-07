@@ -10,7 +10,7 @@ import {
 import { buttonStyles, inputStyles } from "./primitives";
 import { formatBedOption } from "../../lib/students";
 import type { StudentAccountRow } from "../../lib/api/students";
-import type { BedSpace, OnboardStudentInput, RoomGender, UpdateStudentAccountInput } from "../../lib/types";
+import { PAYMENT_METHODS, type BedSpace, type OnboardStudentInput, type PaymentMethod, type RoomGender, type UpdateStudentAccountInput } from "../../lib/types";
 
 export type StudentFormValues = {
   name: string;
@@ -21,6 +21,10 @@ export type StudentFormValues = {
   bedSpaceId: string;
   rentAmount: string;
   gender: RoomGender | "";
+  paymentAmount: string;
+  paymentDate: string;
+  paymentMethod: PaymentMethod;
+  paymentRef: string;
 };
 
 function todayIso(): string {
@@ -37,6 +41,10 @@ function valuesFromStudent(row: StudentAccountRow): StudentFormValues {
     bedSpaceId: row.bed_space_id ?? "",
     rentAmount: row.rent_amount != null ? String(row.rent_amount) : "",
     gender: row.gender ?? row.room_gender ?? "",
+    paymentAmount: "",
+    paymentDate: todayIso(),
+    paymentMethod: "Cash",
+    paymentRef: "",
   };
 }
 
@@ -50,6 +58,10 @@ function emptyValues(defaultBedId: string, defaultRent: string): StudentFormValu
     bedSpaceId: defaultBedId,
     rentAmount: defaultRent,
     gender: "",
+    paymentAmount: "",
+    paymentDate: todayIso(),
+    paymentMethod: "Cash",
+    paymentRef: "",
   };
 }
 
@@ -112,6 +124,7 @@ export default function StudentAccountDialog({
       ...prev,
       bedSpaceId: bedId,
       rentAmount: bed ? String(bed.rentAmount) : prev.rentAmount,
+      gender: bed?.roomGender ?? prev.gender,
     }));
   }
 
@@ -129,7 +142,7 @@ export default function StudentAccountDialog({
       setError("An email is required so we can send the password invite.");
       return;
     }
-    if (mode === "create" && !form.gender) {
+    if (!form.gender) {
       setError("Select whether the student is male or female.");
       return;
     }
@@ -157,6 +170,15 @@ export default function StudentAccountDialog({
           gender: form.gender || undefined,
         });
       } else if (student) {
+        const paymentAmount = Number(form.paymentAmount);
+        const manualPayment = form.paymentAmount.trim() && Number.isFinite(paymentAmount) && paymentAmount > 0
+          ? {
+              amount: paymentAmount,
+              submittedAt: form.paymentDate || todayIso(),
+              method: form.paymentMethod,
+              transactionRef: form.paymentRef.trim() || undefined,
+            }
+          : undefined;
         await onUpdate({
           tenantId: student.id,
           name,
@@ -166,6 +188,8 @@ export default function StudentAccountDialog({
           moveInDate: form.moveInDate || todayIso(),
           bedSpaceId: form.bedSpaceId,
           rentAmount,
+          gender: form.gender || undefined,
+          manualPayment,
         });
       }
       onOpenChange(false);
@@ -184,7 +208,7 @@ export default function StudentAccountDialog({
           <DialogDescription>
             {mode === "create"
               ? "Assign gender and a matching vacant bed. We’ll email a link (valid at least 15 minutes) so they can finish onboarding, pick their bed if needed, and create a password."
-              : "Update contact details, move the student to another bed, or change the monthly rent."}
+              : "Update contact details, gender, bed, rent, or record a cash/mobile receipt for students who paid without the app."}
           </DialogDescription>
         </DialogHeader>
 
@@ -240,19 +264,20 @@ export default function StudentAccountDialog({
                 value={form.gender}
                 onChange={(e) => {
                   const next = e.target.value as RoomGender | "";
-                  const first = beds
-                    .filter((bed) => !bed.student)
+                  const matching = beds
+                    .filter((bed) => !bed.student || (mode === "edit" && student?.bed_space_id === bed.id))
                     .filter((bed) => !next || !bed.roomGender || bed.roomGender === next)
-                    .sort((a, b) => a.id.localeCompare(b.id))[0];
+                    .sort((a, b) => a.id.localeCompare(b.id));
+                  const keep = matching.find((bed) => bed.id === form.bedSpaceId) ?? matching[0];
                   setForm((prev) => ({
                     ...prev,
                     gender: next,
-                    bedSpaceId: first?.id ?? "",
-                    rentAmount: first ? String(first.rentAmount) : prev.rentAmount,
+                    bedSpaceId: keep?.id ?? "",
+                    rentAmount: keep ? String(keep.rentAmount) : prev.rentAmount,
                   }));
                 }}
                 className={inputStyles}
-                required={mode === "create"}
+                required
               >
                 <option value="">Select gender</option>
                 <option value="Male">Male</option>
@@ -304,6 +329,63 @@ export default function StudentAccountDialog({
               />
             </label>
           </div>
+
+          {mode === "edit" && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Record last payment</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {student?.last_payment_at
+                    ? `Current last payment: ${student.last_payment_at}${student.last_payment_amount != null ? ` · K${student.last_payment_amount}` : ""}. Leave amount blank to keep it.`
+                    : "For students who paid in cash or without the app. Leave amount blank unless you are recording a receipt."}
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Amount (K)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.paymentAmount}
+                    onChange={(e) => setField("paymentAmount", e.target.value)}
+                    className={inputStyles}
+                    placeholder="e.g. 900"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment date</span>
+                  <input
+                    type="date"
+                    value={form.paymentDate}
+                    onChange={(e) => setField("paymentDate", e.target.value)}
+                    className={inputStyles}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Method</span>
+                  <select
+                    value={form.paymentMethod}
+                    onChange={(e) => setField("paymentMethod", e.target.value as PaymentMethod)}
+                    className={inputStyles}
+                  >
+                    {PAYMENT_METHODS.map((method) => (
+                      <option key={method} value={method}>{method}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Receipt / ref</span>
+                  <input
+                    value={form.paymentRef}
+                    onChange={(e) => setField("paymentRef", e.target.value)}
+                    className={inputStyles}
+                    placeholder="Optional"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
 
           {error && (
             <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{error}</p>

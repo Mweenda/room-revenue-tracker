@@ -23,12 +23,19 @@ export function getDaysPastDue(
   targetMonth: string,
   year = getCurrentYear(),
   today = new Date(),
+  unpaid = true,
 ): number {
   if (!targetMonth || targetMonth === "-") return 0;
   const idx = MONTH_ABBR.indexOf(targetMonth as BillingMonth);
   if (idx < 0) return 0;
 
-  const due = new Date(year, idx, 1);
+  let dueYear = year;
+  if (idx > today.getMonth()) {
+    if (!unpaid) return 0;
+    dueYear = year - 1;
+  }
+
+  const due = new Date(dueYear, idx, 1);
   const now = new Date(today);
   due.setHours(0, 0, 0, 0);
   now.setHours(0, 0, 0, 0);
@@ -70,7 +77,7 @@ export function refreshBillingRecord(record: BillingRecord): BillingRecord {
   }
 
   const targetMonth = record.target_month === "-" ? getCurrentBillingMonth() : record.target_month;
-  const daysPastDue = getDaysPastDue(targetMonth);
+  const daysPastDue = getDaysPastDue(targetMonth, getCurrentYear(), new Date(), record.total_balance > 0);
   const billing_status = computeBillingStatus(
     record.tenant_name,
     record.total_balance,
@@ -93,17 +100,8 @@ export function refreshBillingRecords(records: BillingRecord[]): BillingRecord[]
  * Historical months are not fabricated: `billing_records` stores the current
  * cycle only. Callers that need a past period should load `financial_snapshots`.
  */
-export function billingRecordsForMonth(records: BillingRecord[], month: BillingMonth): BillingRecord[] {
-  const refreshed = refreshBillingRecords(records);
-  const currentMonth = getCurrentBillingMonth();
-
-  return refreshed.map((record) => {
-    if (record.billing_status === "Vacant" || record.tenant_name.trim().toLowerCase() === "vacant") {
-      return { ...record, target_month: "-" };
-    }
-    if (month === currentMonth) return { ...record, target_month: month };
-    return { ...record, target_month: record.target_month === "-" ? month : record.target_month };
-  });
+export function billingRecordsForMonth(records: BillingRecord[], _month: BillingMonth): BillingRecord[] {
+  return refreshBillingRecords(records);
 }
 
 /** Client-side mirror of SQL compute_billing_status */

@@ -38,18 +38,15 @@ import {
   inputStyles,
   HOVER_ROW,
 } from "../components/primitives";
-import OccupancyAuditPanel from "../components/OccupancyAuditPanel";
 import RentIncrementDialog, { type ApplyRentIncrementResult } from "../components/RentIncrementDialog";
 import StudentAccountDialog from "../components/StudentAccountDialog";
 import WhatsAppGateway from "../components/WhatsAppGateway";
-import RentDueCalendar from "../components/RentDueCalendar";
 import { BLOCKS, fmtKwacha } from "../../lib/billing";
 import { bedLabel, matchesStudentSearch, TENANT_STATUS_LABEL } from "../../lib/students";
 import { composeRentReminder, whatsappChatUrl } from "../../lib/whatsapp";
 import type { StudentAccountRow } from "../../lib/api/students";
-import type { OccupancyIssue } from "../../lib/occupancy";
 import type { RentIncreaseMode, RentScope } from "../../lib/rent";
-import type { BedSpace, BillingRecord, BillingStatus, BlockCode, OnboardStudentInput, RoomGender, TenantStatus, UpdateStudentAccountInput } from "../../lib/types";
+import type { BedSpace, BillingStatus, BlockCode, OnboardStudentInput, RoomGender, TenantStatus, UpdateStudentAccountInput } from "../../lib/types";
 
 const billingBadge: Record<string, string> = {
   "Open Window": "bg-emerald-100 text-emerald-800",
@@ -81,18 +78,14 @@ export type EvictionResult = {
 export default function StudentsView({
   students,
   beds,
-  billingRecords,
   canManage,
   onboardStudent,
   updateStudentAccount,
   evictStudent,
   applyRentIncrement,
-  runOccupancyAudit,
-  reconcileOccupancy,
 }: {
   students: StudentAccountRow[];
   beds: BedSpace[];
-  billingRecords: BillingRecord[];
   canManage: boolean;
   onboardStudent: (input: OnboardStudentInput) => Promise<unknown>;
   updateStudentAccount: (input: UpdateStudentAccountInput) => Promise<unknown>;
@@ -107,15 +100,12 @@ export default function StudentsView({
     value: number;
     effectiveDate: string;
   }) => Promise<ApplyRentIncrementResult>;
-  runOccupancyAudit: () => Promise<OccupancyIssue[]>;
-  reconcileOccupancy: () => Promise<void>;
 }) {
   const [search, setSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState<BlockCode | "all">("all");
   const [billingFilter, setBillingFilter] = useState<BillingStatus | "all">("all");
   const [statusFilter, setStatusFilter] = useState<TenantStatus | "all">("active");
   const [genderFilter, setGenderFilter] = useState<RoomGender | "all">("all");
-  const [calendarDate, setCalendarDate] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<StudentAccountRow | null>(null);
   const [rentDialogOpen, setRentDialogOpen] = useState(false);
@@ -135,17 +125,16 @@ export default function StudentsView({
       (blockFilter === "all" || row.block_code === blockFilter) &&
       (billingFilter === "all" || row.billing_status === billingFilter) &&
       (statusFilter === "all" || row.tenant_status === statusFilter) &&
-      (genderFilter === "all" || row.gender === genderFilter || row.room_gender === genderFilter) &&
-      (!calendarDate || row.due_date === calendarDate),
+      (genderFilter === "all" || row.gender === genderFilter || row.room_gender === genderFilter),
     ),
-    [students, search, blockFilter, billingFilter, statusFilter, genderFilter, calendarDate],
+    [students, search, blockFilter, billingFilter, statusFilter, genderFilter],
   );
 
   const activeStudents = students.filter((row) => row.tenant_status === "active");
   const overdue = activeStudents.filter((row) => row.billing_status === "OVERDUE / UNPAID");
   const totalOutstanding = activeStudents.reduce((sum, row) => sum + (row.total_balance ?? 0), 0);
   const removedCount = students.length - activeStudents.length;
-  const filtersActive = search !== "" || blockFilter !== "all" || billingFilter !== "all" || statusFilter !== "active" || genderFilter !== "all" || Boolean(calendarDate);
+  const filtersActive = search !== "" || blockFilter !== "all" || billingFilter !== "all" || statusFilter !== "active" || genderFilter !== "all";
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((row) => selectedIds.has(row.id));
 
@@ -319,15 +308,13 @@ export default function StudentsView({
 
             {filtersActive && (
               <button
-                onClick={() => { setSearch(""); setBlockFilter("all"); setBillingFilter("all"); setStatusFilter("active"); setGenderFilter("all"); setCalendarDate(null); }}
+                onClick={() => { setSearch(""); setBlockFilter("all"); setBillingFilter("all"); setStatusFilter("active"); setGenderFilter("all"); }}
                 className="text-xs font-semibold text-slate-500 hover:text-slate-900 inline-flex items-center gap-1 transition-colors"
               >
                 <X size={12} /> Clear
               </button>
             )}
           </div>
-
-          <RentDueCalendar billingRecords={billingRecords} selectedDate={calendarDate} onSelectDate={setCalendarDate} />
 
           <div className="border border-slate-100 rounded-xl">
             <Table>
@@ -466,8 +453,6 @@ export default function StudentsView({
           </div>
         </div>
       </SectionCard>
-
-      <OccupancyAuditPanel runAudit={runOccupancyAudit} onReconcile={reconcileOccupancy} />
 
       <StudentAccountDialog
         open={formOpen}

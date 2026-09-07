@@ -1,6 +1,6 @@
 export { fetchBeds } from "./beds";
 export { fetchBillingRecords } from "./billing";
-export { fetchPayments, submitPayment, verifyPayment, rejectPayment, updatePayment } from "./payments";
+export { fetchPayments, submitPayment, verifyPayment, rejectPayment, updatePayment, recordManualPayment } from "./payments";
 export { fetchIssues, submitIssue, updateIssueStatus } from "./issues";
 export { fetchStudentNotifications, markStudentNotificationRead, ensureRentDueNotification } from "./notifications";
 export { fetchUtilities, upsertUtility, toggleUtilitySettled } from "./utilities";
@@ -12,7 +12,6 @@ export { persistFinancialSnapshot } from "./snapshots";
 export { applyRentIncrement } from "./rent";
 export type { RentIncrementRow } from "./rent";
 export {
-  auditOccupancy,
   reconcileAllOccupancy,
   reconcileBedSpace,
   findTenantOnBed,

@@ -8,7 +8,8 @@ export type TenantStatus = "active" | "evicted" | "moved_out";
 export type StudentView = "home" | "notifications" | "profile" | "settings";
 export type Role = "landlord" | "student";
 export type BillingStatus = "Open Window" | "Paid / Secured" | "OVERDUE / UNPAID" | "Vacant" | "Grace Period";
-export type PaymentMethod = "Airtel" | "MTN";
+export const PAYMENT_METHODS = ["Cash", "Airtel", "MTN"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export type RoomGender = "Male" | "Female";
 
 export interface Student {
@@ -117,6 +118,13 @@ export interface UpdatePaymentInput {
   submittedAt: string;
 }
 
+export interface ManualPaymentInput {
+  amount: number;
+  submittedAt: string;
+  method: PaymentMethod;
+  transactionRef?: string;
+}
+
 export interface UpdateStudentAccountInput {
   tenantId: string;
   name: string;
@@ -126,6 +134,8 @@ export interface UpdateStudentAccountInput {
   moveInDate: string;
   bedSpaceId: string;
   rentAmount: number;
+  gender?: RoomGender;
+  manualPayment?: ManualPaymentInput;
 }
 
 export interface SubmitPaymentInput {

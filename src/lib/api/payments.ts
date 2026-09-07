@@ -41,6 +41,62 @@ export async function submitPayment(input: SubmitPaymentInput): Promise<Payment>
   return mapPayment(data);
 }
 
+export async function recordManualPayment(input: {
+  bedSpaceId: string;
+  studentName: string;
+  amount: number;
+  method: Payment["method"];
+  transactionRef?: string;
+  submittedAt: string;
+}): Promise<Payment> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Supabase not configured");
+  if (!(input.amount > 0)) throw new Error("Payment amount must be greater than zero");
+  if (!input.bedSpaceId) throw new Error("A bed space is required");
+
+  const submittedAt = input.submittedAt || new Date().toISOString().slice(0, 10);
+  const ref = input.transactionRef?.trim() || `CASH-${submittedAt.replace(/-/g, "")}`;
+
+  const { data, error } = await sb.rpc("record_manual_payment", {
+    p_bed_space_id: input.bedSpaceId,
+    p_student_name: input.studentName,
+    p_amount: input.amount,
+    p_method: input.method,
+    p_transaction_ref: ref,
+    p_submitted_at: submittedAt,
+  });
+  if (!error && data) {
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row) return mapPayment(row);
+  }
+
+  const id = `p-manual-${Date.now()}`;
+  const { data: inserted, error: insertError } = await sb
+    .from("payments")
+    .insert({
+      id,
+      student_name: input.studentName,
+      bed_space_id: input.bedSpaceId,
+      amount: input.amount,
+      method: input.method,
+      transaction_ref: ref,
+      submitted_at: submittedAt,
+      status: "pending",
+    })
+    .select("*")
+    .single();
+  if (insertError) throw error ?? insertError;
+
+  const { data: verified, error: verifyError } = await sb
+    .from("payments")
+    .update({ status: "verified", rejection_reason: null })
+    .eq("id", inserted.id)
+    .select("*")
+    .single();
+  if (verifyError) throw verifyError;
+  return mapPayment(verified);
+}
+
 export async function verifyPayment(id: string): Promise<Payment> {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");

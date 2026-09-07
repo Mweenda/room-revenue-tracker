@@ -20,6 +20,36 @@ export function bedHasTenant(bed: BedSpace): boolean {
   return Boolean(bed.student?.id && bed.student.name.trim().toLowerCase() !== "vacant");
 }
 
+/** Digits-only form of a tenant phone. Empty / "-" is treated as missing. */
+export function normalizeTenantPhone(phone?: string | null): string {
+  return (phone ?? "").replace(/[^\d]/g, "");
+}
+
+export function findBedsSharingPhone(
+  beds: BedSpace[],
+  phone: string,
+  exceptTenantId?: string,
+): BedSpace[] {
+  const normalized = normalizeTenantPhone(phone);
+  if (!normalized) return [];
+  return beds.filter((bed) => {
+    if (!bedHasTenant(bed)) return false;
+    if (exceptTenantId && bed.student?.id === exceptTenantId) return false;
+    return normalizeTenantPhone(bed.student?.phone) === normalized;
+  });
+}
+
+export function assertUniqueActivePhone(
+  beds: BedSpace[],
+  phone: string,
+  exceptTenantId?: string,
+): void {
+  const clash = findBedsSharingPhone(beds, phone, exceptTenantId)[0];
+  if (clash) {
+    throw new Error(`Phone ${phone.trim()} is already assigned to bed ${clash.id}`);
+  }
+}
+
 export function isBillingVacant(record?: BillingRecord): boolean {
   if (!record) return true;
   return record.billing_status === "Vacant" || record.tenant_name.trim().toLowerCase() === "vacant";

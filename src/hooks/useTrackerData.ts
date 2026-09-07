@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BILLING_RECORDS,
   SEED_BEDS,
@@ -7,17 +7,17 @@ import {
   SEED_UTILITIES,
 } from "../data/seed";
 import * as api from "../lib/api";
-import { calcUtilitySplit, getCurrentBillingMonth, refreshBillingRecords } from "../lib/billing";
+import { calcUtilitySplit, getCurrentBillingMonth, refreshBillingRecord, refreshBillingRecords, BILLING_MONTHS } from "../lib/billing";
+import { applyPaymentToLedger, rollBillingRecords } from "../lib/paymentTracking";
+import { useLiveDateTime } from "./useLiveDateTime";
 import {
-  auditOccupancyLocal,
   deriveBedFromTenantAndBilling,
   isBedAssignable,
-  reconcileBedsLocal,
-  type OccupancyIssue,
+  assertUniqueActivePhone,
 } from "../lib/occupancy";
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 import { inviteStudentToPortal, sendTenantNotification, sendWelcomeEmail } from "../lib/auth";
-import { deriveStudentAccounts, applyStudentAccountUpdate, enrichStudentAccounts } from "../lib/students";
+import { deriveStudentAccounts, applyStudentAccountUpdate, applyManualVerifiedPayment, enrichStudentAccounts } from "../lib/students";
 import { applyPaymentEdit } from "../lib/paymentsEdit";
 import { buildRentPreview, type RentIncreaseMode, type RentScope } from "../lib/rent";
 import type { RentIncrementRow } from "../lib/api/rent";
@@ -31,6 +31,7 @@ import type {
   OnboardStudentInput,
   Payment,
   PaymentMethod,
+  RoomGender,
   SubmitIssueInput,
   TenantStatus,
   UpdateStudentAccountInput,
@@ -62,7 +63,7 @@ const OFFLINE_DEMO = !isSupabaseConfigured;
 export function useTrackerData() {
   const [beds, setBeds] = useState<BedSpace[]>(OFFLINE_DEMO ? SEED_BEDS : []);
   const [billingRecords, setBillingRecords] = useState<BillingRecord[]>(
-    OFFLINE_DEMO ? refreshBillingRecords(BILLING_RECORDS) : [],
+    OFFLINE_DEMO ? refreshBillingRecords(rollBillingRecords(BILLING_RECORDS)) : [],
   );
   const [payments, setPayments] = useState<Payment[]>(OFFLINE_DEMO ? SEED_PAYMENTS : []);
   const [issues, setIssues] = useState<MaintenanceIssue[]>(OFFLINE_DEMO ? SEED_ISSUES : []);
@@ -159,15 +160,29 @@ export function useTrackerData() {
     return () => subscription.subscription.unsubscribe();
   }, [refresh]);
 
+  const now = useLiveDateTime();
+  const billingMonth = BILLING_MONTHS[now.getMonth()];
+  const liveBillingRecords = useMemo(
+    () => refreshBillingRecords(rollBillingRecords(billingRecords, billingMonth, now)),
+    [billingRecords, billingMonth, now],
+  );
+
+  const previousMonth = useRef(billingMonth);
+  useEffect(() => {
+    if (previousMonth.current === billingMonth) return;
+    previousMonth.current = billingMonth;
+    if (isSupabaseConfigured) void refresh();
+  }, [billingMonth, refresh]);
+
   const billingMap = useMemo(
-    () => new Map(billingRecords.map((r) => [r.billing_id, r])),
-    [billingRecords],
+    () => new Map(liveBillingRecords.map((r) => [r.billing_id, r])),
+    [liveBillingRecords],
   );
 
   const students = useMemo<StudentAccountRow[]>(() => {
-    const rows = remoteStudents ?? [...deriveStudentAccounts(beds, billingRecords), ...localInactiveStudents];
-    return enrichStudentAccounts(rows, payments, billingRecords);
-  }, [remoteStudents, beds, billingRecords, localInactiveStudents, payments]);
+    const rows = remoteStudents ?? [...deriveStudentAccounts(beds, liveBillingRecords), ...localInactiveStudents];
+    return enrichStudentAccounts(rows, payments, liveBillingRecords);
+  }, [remoteStudents, beds, liveBillingRecords, localInactiveStudents, payments]);
 
   const onboard = useCallback(
     async (input: OnboardStudentInput) => {
@@ -202,11 +217,18 @@ export function useTrackerData() {
       if (!targetBed || !isBedAssignable(targetBed, billingByBed.get(input.bedId))) {
         throw new Error("Bed space is already occupied");
       }
+      if (!input.gender) {
+        throw new Error("Select whether the student is male or female.");
+      }
+      if (targetBed.roomGender && input.gender !== targetBed.roomGender) {
+        throw new Error(`Student gender must match the bed space (${targetBed.roomGender})`);
+      }
 
       const normalizedEmail = input.email.trim().toLowerCase();
       if (normalizedEmail && beds.some((b) => b.student?.email?.trim().toLowerCase() === normalizedEmail)) {
         throw new Error("This email is already assigned to another bed");
       }
+      assertUniqueActivePhone(beds, input.phone);
 
       const student = {
         id: `s-${Date.now()}`,
@@ -246,25 +268,6 @@ export function useTrackerData() {
     [beds, billingRecords, source],
   );
 
-  const runOccupancyAudit = useCallback(async (): Promise<OccupancyIssue[]> => {
-    if (source === "supabase") {
-      return api.auditOccupancy();
-    }
-    return auditOccupancyLocal(beds, billingRecords);
-  }, [beds, billingRecords, source]);
-
-  const reconcileOccupancy = useCallback(async () => {
-    if (source === "supabase") {
-      await api.reconcileAllOccupancy();
-      await refresh();
-      return;
-    }
-
-    const reconciled = reconcileBedsLocal(beds, billingRecords);
-    setBeds(reconciled.beds);
-    setBillingRecords(reconciled.billingRecords);
-  }, [beds, billingRecords, refresh, source]);
-
   const updateStudent = useCallback(
     async (input: {
       tenantId: string;
@@ -273,6 +276,7 @@ export function useTrackerData() {
       email: string;
       nrc?: string;
       moveInDate: string;
+      gender?: RoomGender;
       sendLoginLink?: boolean;
     }) => {
       if (source === "supabase") {
@@ -296,6 +300,7 @@ export function useTrackerData() {
         nrc: input.nrc ?? "-",
         email: input.email,
         moveInDate: input.moveInDate,
+        gender: input.gender,
       };
 
       setBeds((prev) =>
@@ -338,8 +343,18 @@ export function useTrackerData() {
       }
 
       const next = applyStudentAccountUpdate(beds, billingRecords, input);
+      let nextBilling = next.billingRecords;
+      if (input.manualPayment && input.manualPayment.amount > 0) {
+        const paid = applyManualVerifiedPayment(nextBilling, payments, {
+          bedSpaceId: input.bedSpaceId,
+          studentName: input.name.trim(),
+          payment: input.manualPayment,
+        });
+        nextBilling = paid.billingRecords;
+        setPayments(paid.payments);
+      }
       setBeds(next.beds);
-      setBillingRecords(next.billingRecords);
+      setBillingRecords(nextBilling);
       return {
         tenantId: input.tenantId,
         fullName: input.name.trim(),
@@ -347,7 +362,7 @@ export function useTrackerData() {
         rentAmount: input.rentAmount,
       };
     },
-    [beds, billingRecords, refresh, source],
+    [beds, billingRecords, payments, refresh, source],
   );
 
   const vacateBed = useCallback(
@@ -576,12 +591,17 @@ export function useTrackerData() {
         setBillingRecords((prev) =>
           prev.map((r) => {
             if (r.billing_id !== payment.bedSpaceId) return r;
-            const total_balance = Math.max(0, r.total_balance - payment.amount);
-            return {
+            const ledger = applyPaymentToLedger({
+              totalBalance: r.total_balance,
+              currentRent: r.current_rent,
+              targetMonth: r.target_month,
+              amount: payment.amount,
+            });
+            return refreshBillingRecord({
               ...r,
-              total_balance,
-              billing_status: total_balance === 0 ? "Paid / Secured" : r.billing_status,
-            };
+              total_balance: ledger.totalBalance,
+              target_month: ledger.targetMonth,
+            });
           }),
         );
       }
@@ -785,7 +805,7 @@ export function useTrackerData() {
   return {
     beds,
     setBeds,
-    billingRecords,
+    billingRecords: liveBillingRecords,
     billingMap,
     payments,
     setPayments,
@@ -803,8 +823,6 @@ export function useTrackerData() {
     vacateBed,
     evictStudent,
     applyRentIncrement,
-    runOccupancyAudit,
-    reconcileOccupancy,
     updateStudent,
     updateStudentAccount,
     uploadStudentProfilePhoto,

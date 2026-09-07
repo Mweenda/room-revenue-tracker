@@ -6,7 +6,8 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 const Color _slate900 = Color(0xFF0F172A);
 const String _portalUrl =
-    'https://room-revenue-tracker.web.app/?app=student';
+    'https://room-revenue-tracker.web.app/student';
+const String _shellUserAgentToken = 'RoomRevenueStudent/1.1.3';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -94,6 +95,11 @@ class _StudentPortalShellState extends State<StudentPortalShell>
       AndroidWebViewController.enableDebugging(false);
       platform.setMediaPlaybackRequiresUserGesture(false);
       platform.setOnShowFileSelector(_androidFilePicker);
+      platform.setUserAgent(
+        'Mozilla/5.0 (Linux; Android 13; wv) AppleWebKit/537.36 '
+        '(KHTML, like Gecko) Version/4.0 Chrome/122.0.0.0 Mobile Safari/537.36 '
+        '$_shellUserAgentToken',
+      );
     }
 
     _controller = controller;

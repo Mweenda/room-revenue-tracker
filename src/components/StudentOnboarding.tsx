@@ -3,6 +3,7 @@ import { Shield, User, BedDouble, FileText, KeyRound, CheckCircle } from "lucide
 import { completeStudentOnboarding, listVacantBedsForOnboarding } from "../lib/api/tenants";
 import { fetchAuthenticatedStudent, linkTenantToAuthUser } from "../lib/auth";
 import { getSupabase } from "../lib/supabase";
+import { studentShellLocation } from "../lib/studentApp";
 import { formatBedOption } from "../lib/students";
 import {
   nextOnboardingStep,
@@ -79,7 +80,7 @@ export default function StudentOnboarding({
             if (active) setError("This invite link is invalid or has expired. Ask your landlord to send a new one.");
             return;
           }
-          window.history.replaceState({}, "", `${window.location.pathname}?auth=student-confirm`);
+          window.history.replaceState({}, "", studentShellLocation(window.location.pathname, window.location.search, { auth: "student-confirm" }));
         }
       }
 
@@ -173,7 +174,7 @@ export default function StudentOnboarding({
       });
       const linked = await fetchAuthenticatedStudent() ?? await linkTenantToAuthUser(email);
       if (!linked) throw new Error("Account created, but your tenant profile could not be loaded. Sign in again.");
-      window.history.replaceState({}, "", window.location.pathname);
+      window.history.replaceState({}, "", studentShellLocation(window.location.pathname, window.location.search, { auth: null }, true));
       onLoginSuccess(linked);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not finish onboarding");

@@ -1,6 +1,7 @@
 import { getSupabase } from "../supabase";
 import { inviteStudentToPortal } from "../auth";
 import type { TenantStatus, UpdateStudentAccountInput } from "../types";
+import { recordManualPayment } from "./payments";
 
 export type StudentAccountRow = {
   id: string;
@@ -181,8 +182,18 @@ export async function updateStudentAccount(input: UpdateStudentAccountInput): Pr
     p_move_in_date: input.moveInDate || null,
     p_bed_space_id: input.bedSpaceId,
     p_rent_amount: input.rentAmount,
+    p_gender: input.gender ?? null,
   });
-  if (error) throw error;
+  if (error) {
+    const text = error.message ?? "";
+    if (text.includes("tenants_active_phone_idx") || /phone .* already assigned/i.test(text)) {
+      throw new Error("That phone number is already assigned to another active student.");
+    }
+    if (/gender must match/i.test(text)) {
+      throw new Error(text);
+    }
+    throw error;
+  }
 
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error("Update did not return a result");
@@ -190,6 +201,17 @@ export async function updateStudentAccount(input: UpdateStudentAccountInput): Pr
   const nextEmail = input.email.trim();
   if (nextEmail && nextEmail.toLowerCase() !== (existing.email ?? "").toLowerCase()) {
     await inviteStudentToPortal(nextEmail, name);
+  }
+
+  if (input.manualPayment && input.manualPayment.amount > 0) {
+    await recordManualPayment({
+      bedSpaceId: row.bed_space_id,
+      studentName: row.full_name,
+      amount: input.manualPayment.amount,
+      method: input.manualPayment.method,
+      transactionRef: input.manualPayment.transactionRef,
+      submittedAt: input.manualPayment.submittedAt,
+    });
   }
 
   return {

@@ -10,9 +10,9 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useTrackerData } from "../hooks/useTrackerData";
-import { BLOCKS, billingMonthOptions, billingRecordsForMonth, formatBillingPeriodLabel, formatMonthYear, formatMonthYearShort, getCurrentBillingMonth, getCurrentYear, type BillingMonth } from "../lib/billing";
+import { BLOCKS, BILLING_MONTHS, formatBillingPeriodLabel, formatMonthYear, getCurrentBillingMonth, getCurrentYear, type BillingMonth } from "../lib/billing";
 import { formatHeaderDateTime, useLiveDateTime } from "../hooks/useLiveDateTime";
-import { isBedAssignable, type OccupancyIssue } from "../lib/occupancy";
+import { isBedAssignable } from "../lib/occupancy";
 import { LandingPage } from "../components/LandingPage";
 import { StudentLogin } from "../components/StudentLogin";
 import StudentOnboarding from "../components/StudentOnboarding";
@@ -24,6 +24,7 @@ import { ColorModeProvider, ColorModeRoot, useColorMode } from "../lib/colorMode
 import { getSupabase } from "../lib/supabase";
 import { Toaster } from "./components/ui/sonner";
 import { Badge, KpiCard, SectionCard, StatusBanner } from "./components/primitives";
+import SpreadsheetPaymentBoard from "./components/SpreadsheetPaymentBoard";
 import StudentsView from "./views/StudentsView";
 import ReportsView from "./views/ReportsView";
 import { StudentNotificationsView } from "./views/StudentNotificationsView";
@@ -32,7 +33,8 @@ import { StudentCollapsingHeader } from "./components/StudentCollapsingHeader";
 import { StudentPortalNav } from "./components/StudentPortalNav";
 import { StudentWelcomeAd } from "./components/StudentWelcomeAd";
 import { useStudentInbox } from "../hooks/useStudentInbox";
-import { isStudentNativeShell, shouldShowWelcomeAd } from "../lib/studentApp";
+import { isStudentNativeShell, pinStudentShellLocation, shouldShowWelcomeAd, studentShellLocation } from "../lib/studentApp";
+import { vacantBedsForGender } from "../lib/studentOnboarding";
 import { compactTitleVisible, headerCollapseProgress } from "../lib/studentPortalHeader";
 import { useStudentViewport } from "../hooks/useStudentViewport";
 import { assertLandlord, isLandlord } from "../lib/authz";
@@ -53,6 +55,7 @@ import type {
   Payment,
   PaymentMethod,
   PayStatus,
+  RoomGender,
   StudentView,
   TenantStatus,
   UpdateStudentAccountInput,
@@ -231,7 +234,7 @@ function BedCard({ bed, billingRecord, onClick }: { bed: BedSpace; billingRecord
         <span className="font-mono text-[9px] font-bold text-slate-500 uppercase tracking-wide">{bed.identifier}</span>
       </div>
       <p className={`text-[11px] font-semibold ${style.text} line-clamp-2 flex-1 leading-snug`}>
-        {bed.student?.name ?? "Vacant"}
+        {bed.student?.name ?? (bed.roomGender ? `Vacant · ${bed.roomGender}` : "Vacant")}
       </p>
       <p className="text-[10px] font-mono text-slate-400 font-medium">{fmt(bed.rentAmount)}</p>
     </button>
@@ -841,13 +844,13 @@ function StudentSettingsView({ onLogout, email }: { onLogout: () => void; email:
 
 // ─── Revenue View ─────────────────────────────────────────────────────────────
 
-function RevenueView({ billingRecords, billingMonth, onBillingMonthChange }: { billingRecords: BillingRecord[]; billingMonth: BillingMonth; onBillingMonthChange: (month: BillingMonth) => void }) {
+function RevenueView({ billingRecords, billingMonth }: { billingRecords: BillingRecord[]; billingMonth: BillingMonth }) {
   const [search, setSearch] = useState("");
   const [filterBlock, setFilterBlock] = useState<BlockCode | "ALL">("ALL");
   const [filterStatus, setFilterStatus] = useState<BillingStatus | "ALL">("ALL");
   const [filterGender, setFilterGender] = useState<"All" | "Male" | "Female">("All");
 
-  const monthRecords = billingRecordsForMonth(billingRecords, billingMonth);
+  const monthRecords = billingRecords;
   const groups = {
     "Open Window":     monthRecords.filter((r) => r.billing_status === "Open Window"),
     "Paid / Secured":  monthRecords.filter((r) => r.billing_status === "Paid / Secured"),
@@ -906,6 +909,8 @@ function RevenueView({ billingRecords, billingMonth, onBillingMonthChange }: { b
         <KpiCard label={`Expected ${billingMonth}`} value={fmt(monthRecords.filter(r => r.billing_status !== "Vacant").reduce((s,r) => s + r.current_rent, 0))} accent="text-blue-700" icon={DollarSign} />
         <KpiCard label="Overdue Exposure" value={fmt(groups["OVERDUE / UNPAID"].reduce((s, r) => s + r.total_balance, 0))} accent="text-red-600" icon={AlertTriangle} />
       </div>
+
+      <SpreadsheetPaymentBoard billingRecords={monthRecords} />
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 items-stretch">
         <SectionCard title="Billing Status Breakdown" className="xl:col-span-3 min-w-0">
@@ -1027,7 +1032,10 @@ function RevenueView({ billingRecords, billingMonth, onBillingMonthChange }: { b
                 </select>
               ))}
             </div>
-            <div className="flex items-center justify-between gap-3"><p className="text-xs text-slate-400">{filtered.length} of {monthRecords.length} records</p><select value={billingMonth} onChange={(e) => onBillingMonthChange(e.target.value as BillingMonth)} className="border border-slate-200 rounded-lg px-2.5 py-2 text-xs bg-white font-semibold text-slate-700">{billingMonthOptions().map(({ month, label }) => <option key={month} value={month}>{label}</option>)}</select></div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-slate-400">{filtered.length} of {monthRecords.length} records</p>
+              <p className="text-xs font-semibold text-slate-700">{formatMonthYear(billingMonth)}</p>
+            </div>
           </div>
         </div>
 
@@ -1092,13 +1100,12 @@ function RevenueView({ billingRecords, billingMonth, onBillingMonthChange }: { b
 
 // ─── Portal View ─────────────────────────────────────────────────────────────
 
-function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onboard, updateStudent, vacateBed }: {
+function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, vacateBed }: {
   beds: BedSpace[];
   billingMap: Map<string, BillingRecord>;
   billingMonth: BillingMonth;
-  onBillingMonthChange: (month: BillingMonth) => void;
-  onboard: (input: { bedId: string; name: string; phone: string; email: string; moveInDate: string }) => Promise<unknown>;
-  updateStudent: (input: { tenantId: string; name: string; phone: string; email: string; moveInDate: string }) => Promise<unknown>;
+  onboard: (input: OnboardStudentInput) => Promise<unknown>;
+  updateStudent: (input: { tenantId: string; name: string; phone: string; email: string; moveInDate: string; gender?: RoomGender }) => Promise<unknown>;
   vacateBed: (bedId: string) => Promise<void>;
 }) {
   const [drawerBed, setDrawerBed] = useState<BedSpace | null>(null);
@@ -1106,7 +1113,7 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
   const [editMode, setEditMode] = useState(false);
   const [showVacateConfirm, setShowVacateConfirm] = useState(false);
   const [selectedBlock, setSelectedBlock] = useState<BlockCode | "ALL">("ALL");
-  const [form, setForm] = useState({ name: "", phone: "", email: "", bedId: "", moveInDate: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", bedId: "", moveInDate: "", gender: "" as RoomGender | "" });
   const [onboardSuccess, setOnboardSuccess] = useState(false);
   const [onboardError, setOnboardError] = useState<string | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
@@ -1131,6 +1138,7 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
         phone: form.phone,
         email: form.email,
         moveInDate: form.moveInDate || drawerBed.student.moveInDate,
+        gender: form.gender || undefined,
       });
       setEditMode(false);
       setShowVacateConfirm(false);
@@ -1159,17 +1167,28 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
 
   const occupied = beds.filter((b) => b.status === "occupied").length;
   const vacant = beds.filter((b) => b.status === "vacant").length;
-  const totalRevenue = beds.filter((b) => b.status === "occupied").reduce((s, b) => s + b.rentAmount, 0);
+  const expectedRevenue = beds.filter((b) => b.status === "occupied").reduce((s, b) => s + b.rentAmount, 0);
+  const fullCapacity = beds.reduce((s, b) => s + b.rentAmount, 0);
   const vacantBeds = beds.filter((b) => isBedAssignable(b, billingMap.get(b.id)));
+  const assignableBeds = form.gender
+    ? vacantBedsForGender(vacantBeds, form.gender)
+    : vacantBeds;
   const filteredBeds = selectedBlock === "ALL" ? beds : beds.filter((b) => b.blockCode === selectedBlock);
 
   async function handleOnboard() {
-    if (!form.name || !form.bedId || !form.email.trim()) return;
+    if (!form.name || !form.bedId || !form.email.trim() || !form.gender) return;
     setOnboardError(null);
     try {
-      await onboard({ bedId: form.bedId, name: form.name, phone: form.phone, email: form.email, moveInDate: form.moveInDate || new Date().toISOString().slice(0, 10) });
+      await onboard({
+        bedId: form.bedId,
+        name: form.name,
+        phone: form.phone,
+        email: form.email,
+        moveInDate: form.moveInDate || new Date().toISOString().slice(0, 10),
+        gender: form.gender,
+      });
       setOnboardSuccess(true);
-      setTimeout(() => { setShowOnboard(false); setOnboardSuccess(false); setForm({ name: "", phone: "", email: "", bedId: "", moveInDate: "" }); }, 1800);
+      setTimeout(() => { setShowOnboard(false); setOnboardSuccess(false); setForm({ name: "", phone: "", email: "", bedId: "", moveInDate: "", gender: "" }); }, 1800);
     } catch (err) {
       setOnboardError(err instanceof Error ? err.message : "Onboarding failed");
     }
@@ -1181,15 +1200,11 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
         <KpiCard label="Total Beds" value={beds.length} sub="across 4 blocks" icon={Building2} />
         <KpiCard label="Occupied" value={occupied} accent="text-emerald-600" sub={`${Math.round(occupied / beds.length * 100)}% occupancy`} icon={Users} />
         <KpiCard label="Vacant" value={vacant} accent="text-amber-600" sub="available" icon={Home} />
-        <KpiCard label="Revenue Capacity" value={fmt(totalRevenue)} accent="text-emerald-700" sub={formatMonthYearShort(getCurrentBillingMonth())} icon={DollarSign} />
+        <KpiCard label="Expected Revenue" value={fmt(expectedRevenue)} accent="text-blue-700" sub={`Full capacity ${fmt(fullCapacity)}`} icon={DollarSign} />
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <select value={billingMonth} onChange={(e) => onBillingMonthChange(e.target.value as BillingMonth)} aria-label="Billing month" className="order-first sm:order-none border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white font-semibold text-slate-700 min-h-[44px]">
-          {billingMonthOptions().map(({ month, label }) => (
-            <option key={month} value={month}>{label}</option>
-          ))}
-        </select>
+        <p className="order-first sm:order-none text-sm font-semibold text-slate-700">{formatMonthYear(billingMonth)}</p>
         <div className="flex gap-2 flex-wrap">
           {(["ALL", ...BLOCKS] as (BlockCode | "ALL")[]).map((b) => (
             <button key={b} onClick={() => setSelectedBlock(b)}
@@ -1261,7 +1276,7 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Tenant Profile</h3>
                       {!editMode && (
-                        <button onClick={() => { setEditMode(true); setShowVacateConfirm(false); setDrawerError(null); setForm({ name: drawerBed.student?.name || "", phone: drawerBed.student?.phone || "", email: drawerBed.student?.email || "", bedId: drawerBed.id, moveInDate: drawerBed.student?.moveInDate || "" }); }} className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1">
+                        <button onClick={() => { setEditMode(true); setShowVacateConfirm(false); setDrawerError(null); setForm({ name: drawerBed.student?.name || "", phone: drawerBed.student?.phone || "", email: drawerBed.student?.email || "", bedId: drawerBed.id, moveInDate: drawerBed.student?.moveInDate || "", gender: drawerBed.student?.gender ?? drawerBed.roomGender ?? "" }); }} className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1">
                           <Edit3 size={14} /> Edit
                         </button>
                       )}
@@ -1279,6 +1294,14 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
                           <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Gender</label>
+                          <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value as RoomGender | "" })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                            <option value="">Select gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                          </select>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Move-in Date</label>
@@ -1316,6 +1339,7 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
                         <InfoRow label="Full Name" value={drawerBed.student.name} icon={User} />
                         <InfoRow label="Phone" value={drawerBed.student.phone} icon={Phone} />
                         <InfoRow label="Email" value={drawerBed.student.email} icon={Mail} />
+                        <InfoRow label="Gender" value={drawerBed.student.gender ?? drawerBed.roomGender ?? "—"} />
                         <InfoRow label="Move-in Date" value={drawerBed.student.moveInDate} icon={Calendar} />
                       </div>
                     )}
@@ -1342,8 +1366,8 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
                 ) : (
                   <div className="text-center py-10 text-slate-400">
                     <Home size={36} className="mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">This bed space is currently unoccupied.</p>
-                    <button onClick={() => { setDrawerBed(null); setShowOnboard(true); setForm((f) => ({ ...f, bedId: drawerBed.id })); }}
+                    <p className="text-sm">This bed space is currently unoccupied{drawerBed.roomGender ? ` (${drawerBed.roomGender})` : ""}.</p>
+                    <button onClick={() => { setDrawerBed(null); setShowOnboard(true); setForm((f) => ({ ...f, bedId: drawerBed.id, gender: drawerBed.roomGender ?? f.gender })); }}
                       className="mt-4 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors">
                       Assign Tenant
                     </button>
@@ -1372,15 +1396,39 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
                 <Field label="Phone Number" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} placeholder="260977 000 000" />
                 <Field label="Email Address *" value={form.email} onChange={(v) => setForm((f) => ({ ...f, email: v }))} type="email" />
                 <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Gender *</label>
+                  <select
+                    value={form.gender}
+                    onChange={(e) => {
+                      const next = e.target.value as RoomGender | "";
+                      const matching = next ? vacantBedsForGender(vacantBeds, next) : vacantBeds;
+                      setForm((f) => ({
+                        ...f,
+                        gender: next,
+                        bedId: matching.some((bed) => bed.id === f.bedId) ? f.bedId : (matching[0]?.id ?? ""),
+                      }));
+                    }}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px]"
+                  >
+                    <option value="">Select gender…</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Assign Bed Space *</label>
-                  <select value={form.bedId} onChange={(e) => setForm((f) => ({ ...f, bedId: e.target.value }))}
+                  <select value={form.bedId} onChange={(e) => {
+                    const bedId = e.target.value;
+                    const bed = beds.find((row) => row.id === bedId);
+                    setForm((f) => ({ ...f, bedId, gender: bed?.roomGender ?? f.gender }));
+                  }}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px]">
                     <option value="">Select available bed space…</option>
-                    {vacantBeds.map((b) => <option key={b.id} value={b.id}>{b.id}</option>)}
+                    {assignableBeds.map((b) => <option key={b.id} value={b.id}>{b.id} · {b.roomGender ?? "—"} · K{b.rentAmount}</option>)}
                   </select>
                 </div>
                 <Field label="Move-in Date" value={form.moveInDate} onChange={(v) => setForm((f) => ({ ...f, moveInDate: v }))} type="date" />
-                <button onClick={handleOnboard} disabled={!form.name || !form.bedId || !form.email}
+                <button onClick={handleOnboard} disabled={!form.name || !form.bedId || !form.email || !form.gender}
                   className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl font-semibold text-sm transition-all duration-150 hover:shadow-md">
                   Onboard Tenant
                 </button>
@@ -1396,9 +1444,10 @@ function PortalView({ beds, billingMap, billingMonth, onBillingMonthChange, onbo
 
 // ─── Pay View ────────────────────────────────────────────────────────────────
 
-function PayView({ payments, beds, verifyPay, rejectPay, updatePay }: {
+function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updatePay }: {
   payments: Payment[];
   beds: BedSpace[];
+  billingRecords: BillingRecord[];
   verifyPay: (id: string) => Promise<void>;
   rejectPay: (id: string, reason: string) => Promise<void>;
   updatePay: (input: {
@@ -1485,6 +1534,8 @@ function PayView({ payments, beds, verifyPay, rejectPay, updatePay }: {
         <KpiCard label="Collection Rate" value={`${Math.round((totalVerified / totalExpected) * 100)}%`} accent="text-blue-700" icon={BarChart3} />
       </div>
 
+      <SpreadsheetPaymentBoard billingRecords={billingRecords} />
+
       <SectionCard title={`Revenue Progress — ${formatMonthYear(getCurrentBillingMonth())}`}>
         <div className="p-5 space-y-3">
           {blockProgress.map(({ code, expected, verified, pct }) => (
@@ -1526,7 +1577,7 @@ function PayView({ payments, beds, verifyPay, rejectPay, updatePay }: {
                 <tr key={p.id} className="hover:bg-slate-50 transition-colors duration-150 group">
                   <td className="px-4 py-3.5 font-semibold text-slate-900 max-w-[140px]"><span className="truncate block">{p.studentName}</span></td>
                   <td className="px-4 py-3.5 font-mono text-xs text-slate-600">{p.bedSpaceId}</td>
-                  <td className="px-3 py-3.5"><span className={`px-2 py-0.5 rounded text-xs font-bold ${p.method === "Airtel" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>{p.method}</span></td>
+                  <td className="px-3 py-3.5"><span className={`px-2 py-0.5 rounded text-xs font-bold ${p.method === "Airtel" ? "bg-red-100 text-red-700" : p.method === "MTN" ? "bg-yellow-100 text-yellow-700" : "bg-slate-100 text-slate-700"}`}>{p.method}</span></td>
                   <td className="px-3 py-3.5 font-mono text-xs text-slate-500">{p.transactionRef}</td>
                   <td className="px-3 py-3.5 text-right font-bold text-slate-900">{fmt(p.amount)}</td>
                   <td className="px-3 py-3.5 text-xs text-slate-500">{p.submittedAt}</td>
@@ -1609,6 +1660,7 @@ function PayView({ payments, beds, verifyPay, rejectPay, updatePay }: {
                 <select value={editForm.method} onChange={(e) => setEditForm((f) => ({ ...f, method: e.target.value as PaymentMethod }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white">
                   <option>Airtel</option>
                   <option>MTN</option>
+                  <option>Cash</option>
                 </select>
               </label>
             </div>
@@ -2130,7 +2182,7 @@ const BOTTOM_NAV: { id: LandlordView; label: string; icon: React.ElementType }[]
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudent, updateStudentAccount, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, updatePay, saveUtility, toggleSettled, updateIssueStatus, runOccupancyAudit, reconcileOccupancy }: {
+function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudent, updateStudentAccount, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, updatePay, saveUtility, toggleSettled, updateIssueStatus }: {
   beds: BedSpace[];
   billingRecords: BillingRecord[];
   billingMap: Map<string, BillingRecord>;
@@ -2143,7 +2195,7 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   onLandlordProfileSave: (input: any) => Promise<any>;
   onLogout: () => void;
   onboard: (input: OnboardStudentInput) => Promise<unknown>;
-  updateStudent: (input: { tenantId: string; name: string; phone: string; email: string; moveInDate: string }) => Promise<unknown>;
+  updateStudent: (input: { tenantId: string; name: string; phone: string; email: string; moveInDate: string; gender?: RoomGender }) => Promise<unknown>;
   updateStudentAccount: (input: UpdateStudentAccountInput) => Promise<unknown>;
   vacateBed: (bedId: string) => Promise<void>;
   evictStudent: EvictStudentFn;
@@ -2162,15 +2214,13 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   saveUtility: (blockCode: BlockCode, month: string, totalCost: number) => Promise<unknown>;
   toggleSettled: (blockCode: BlockCode, month: string, name: string) => Promise<void>;
   updateIssueStatus: (id: string, status: IssueStatus, resolutionNote?: string) => Promise<void>;
-  runOccupancyAudit: () => Promise<OccupancyIssue[]>;
-  reconcileOccupancy: () => Promise<void>;
 }) {
   const now = useLiveDateTime();
   const [view, setView] = useState<LandlordView>("revenue");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [billingMonth, setBillingMonth] = useState<BillingMonth>(() => getCurrentBillingMonth());
-  const monthBillingRecords = billingRecordsForMonth(billingRecords, billingMonth);
-  const monthBillingMap = new Map(monthBillingRecords.map((record) => [record.billing_id, record]));
+  const billingMonth = BILLING_MONTHS[now.getMonth()];
+  const monthBillingRecords = billingRecords;
+  const monthBillingMap = billingMap;
 
   const pendingPay = payments.filter((p) => p.status === "pending").length;
   const openIssues = issues.filter((i) => i.status === "open").length;
@@ -2243,13 +2293,13 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
               Could not refresh tracker data from the server. {dataError}
             </StatusBanner>
           )}
-          {view === "portal"    && <PortalView beds={beds} billingMap={monthBillingMap} billingMonth={billingMonth} onBillingMonthChange={setBillingMonth} onboard={onboard} updateStudent={updateStudent} vacateBed={vacateBed} />}
-          {view === "revenue"   && <RevenueView billingRecords={billingRecords} billingMonth={billingMonth} onBillingMonthChange={setBillingMonth} />}
-          {view === "pay"       && <PayView payments={payments} beds={beds} verifyPay={verifyPay} rejectPay={rejectPay} updatePay={updatePay} />}
+          {view === "portal"    && <PortalView beds={beds} billingMap={monthBillingMap} billingMonth={billingMonth} onboard={onboard} updateStudent={updateStudent} vacateBed={vacateBed} />}
+          {view === "revenue"   && <RevenueView billingRecords={monthBillingRecords} billingMonth={billingMonth} />}
+          {view === "pay"       && <PayView payments={payments} beds={beds} billingRecords={monthBillingRecords} verifyPay={verifyPay} rejectPay={rejectPay} updatePay={updatePay} />}
           {view === "utilities" && <UtilitiesView utilities={utilities} beds={beds} saveUtility={saveUtility} toggleSettled={toggleSettled} />}
-          {view === "students"  && <StudentsView students={students} beds={beds} billingRecords={billingRecords} canManage={canManage} onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }} updateStudentAccount={updateStudentAccount} evictStudent={evictStudent} applyRentIncrement={applyRentIncrement} runOccupancyAudit={runOccupancyAudit} reconcileOccupancy={reconcileOccupancy} />}
-          {view === "reports"   && <ReportsView issues={issues} payments={payments} beds={beds} billingRecords={billingRecords} utilities={utilities} canExport={canManage} updateIssueStatus={updateIssueStatus} />}
-          {view === "profile"   && <LandlordProfile beds={beds} billingRecords={billingRecords} landlord={landlord} onSave={onLandlordProfileSave} />}
+          {view === "students"  && <StudentsView students={students} beds={beds} canManage={canManage} onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }} updateStudentAccount={updateStudentAccount} evictStudent={evictStudent} applyRentIncrement={applyRentIncrement} />}
+          {view === "reports"   && <ReportsView issues={issues} payments={payments} beds={beds} billingRecords={monthBillingRecords} utilities={utilities} canExport={canManage} updateIssueStatus={updateIssueStatus} />}
+          {view === "profile"   && <LandlordProfile beds={beds} billingRecords={monthBillingRecords} landlord={landlord} onSave={onLandlordProfileSave} />}
           {view === "settings"  && <LandlordSettings landlord={landlord} onProfileSave={onLandlordProfileSave} />}
         </main>
       </div>
@@ -2313,7 +2363,7 @@ function StudentEmailConfirmation({ onBackToLogin, onLoginSuccess, purpose = "co
             return;
           }
           const keepAuth = purpose === "reset" ? "student-reset" : "student-confirm";
-          window.history.replaceState({}, "", `${window.location.pathname}?auth=${keepAuth}`);
+          window.history.replaceState({}, "", studentShellLocation(window.location.pathname, window.location.search, { auth: keepAuth }, isStudentNativeShell()));
         }
       }
 
@@ -2359,7 +2409,7 @@ function StudentEmailConfirmation({ onBackToLogin, onLoginSuccess, purpose = "co
       return;
     }
 
-    window.history.replaceState({}, "", window.location.pathname);
+    window.history.replaceState({}, "", studentShellLocation(window.location.pathname, window.location.search, { auth: null }, isStudentNativeShell()));
     if (onLoginSuccess) {
       onLoginSuccess(linked);
       return;
@@ -2370,7 +2420,7 @@ function StudentEmailConfirmation({ onBackToLogin, onLoginSuccess, purpose = "co
 
   async function continueToLogin() {
     await signOutStudent();
-    window.history.replaceState({}, "", window.location.pathname);
+    window.history.replaceState({}, "", studentShellLocation(window.location.pathname, window.location.search, { auth: null }, isStudentNativeShell()));
     onBackToLogin();
   }
 
@@ -2433,6 +2483,7 @@ function isAdminRoute(): boolean {
 function AppRoutes() {
   const [view, setView] = useState<View>(() =>
     (() => {
+      pinStudentShellLocation();
       if (isAdminRoute()) return "admin-login";
       const params = new URLSearchParams(window.location.search);
       const auth = params.get("auth");
@@ -2444,11 +2495,17 @@ function AppRoutes() {
   );
   const [currentUser, setCurrentUser] = useState<any>(null);
   const studentShell = isStudentShell();
+  const screen: View = studentShell && view === "landing" ? "student-login" : view;
   const tracker = useTrackerData();
+
+  useEffect(() => {
+    pinStudentShellLocation();
+    if (studentShell && view === "landing") setView("student-login");
+  }, [studentShell, view]);
 
   function handleLogout() { 
     void signOutStudent();
-    window.history.replaceState({}, "", window.location.pathname);
+    window.history.replaceState({}, "", studentShellLocation(window.location.pathname, window.location.search, {}, studentShell));
     setView(studentShell ? "student-login" : "landing");
     setCurrentUser(null);
   }
@@ -2483,7 +2540,7 @@ function AppRoutes() {
     return <AdminDashboard admin={currentUser} onLogout={handleAdminLogout} />;
   }
 
-  if (tracker.loading && view !== "landing" && view !== "student-login" && view !== "landlord-login" && view !== "student-confirm" && view !== "student-reset") {
+  if (tracker.loading && screen !== "landing" && screen !== "student-login" && screen !== "landlord-login" && screen !== "student-confirm" && screen !== "student-reset") {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center space-y-2">
@@ -2494,7 +2551,7 @@ function AppRoutes() {
     );
   }
 
-  if (view === "landing") {
+  if (screen === "landing") {
     return (
       <>
         {tracker.error && (
@@ -2515,23 +2572,23 @@ function AppRoutes() {
     );
   }
 
-  if (view === "student-login") {
-    return <StudentLogin hideBack={studentShell} onBack={() => setView("landing")} onLoginSuccess={handleStudentLoginSuccess} />;
+  if (screen === "student-login") {
+    return <StudentLogin hideBack={studentShell} onBack={() => { if (!studentShell) setView("landing"); }} onLoginSuccess={handleStudentLoginSuccess} />;
   }
 
-  if (view === "student-confirm") {
+  if (screen === "student-confirm") {
     return <StudentOnboarding onLoginSuccess={handleStudentLoginSuccess} />;
   }
 
-  if (view === "student-reset") {
+  if (screen === "student-reset") {
     return <StudentEmailConfirmation purpose="reset" onBackToLogin={() => setView("student-login")} onLoginSuccess={handleStudentLoginSuccess} />;
   }
 
-  if (view === "landlord-login") {
+  if (screen === "landlord-login") {
     return <LandlordLogin onBack={() => setView("landing")} onLoginSuccess={handleLandlordLoginSuccess} />;
   }
 
-  if (view === "student-dashboard") {
+  if (screen === "student-dashboard") {
     return (
       <StudentPortal
         beds={tracker.beds}
@@ -2593,8 +2650,6 @@ function AppRoutes() {
       saveUtility={tracker.saveUtility}
       toggleSettled={tracker.toggleSettled}
       updateIssueStatus={tracker.updateIssue}
-      runOccupancyAudit={tracker.runOccupancyAudit}
-      reconcileOccupancy={tracker.reconcileOccupancy}
     />
   );
 }

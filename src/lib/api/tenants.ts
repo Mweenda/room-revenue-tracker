@@ -104,7 +104,13 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
     return mapOnboardRow(row, { ...input, moveInDate: moveIn });
   }
 
-  if (!rpcMissing(error)) throw postgresMessage(error, "Could not onboard the student");
+  if (!rpcMissing(error)) {
+    const text = error.message ?? "";
+    if (text.includes("tenants_active_phone_idx") || /phone .* already assigned/i.test(text)) {
+      throw new Error("That phone number is already assigned to another active student.");
+    }
+    throw postgresMessage(error, "Could not onboard the student");
+  }
 
   // Fallback until migration 016 is applied: same checks, still not atomic.
   const { data: bedRow, error: bedErr } = await sb
@@ -211,6 +217,7 @@ export async function updateStudent(input: {
   email: string;
   moveInDate: string;
   nrc?: string;
+  gender?: RoomGender;
   sendLoginLink?: boolean;
 }): Promise<Student> {
   const sb = getSupabase();
@@ -236,6 +243,7 @@ export async function updateStudent(input: {
       email: input.email ? normalizeEmail(input.email) : null,
       nrc: input.nrc ?? "-",
       move_in_date: input.moveInDate,
+      ...(input.gender ? { gender: input.gender } : {}),
     })
     .eq("id", input.tenantId)
     .select("*")
@@ -275,6 +283,7 @@ export async function updateStudent(input: {
     email: tenant.email || "-",
     nrc: tenant.nrc ?? "-",
     moveInDate: tenant.move_in_date ?? input.moveInDate,
+    gender: tenant.gender ?? input.gender,
   };
 }
 
