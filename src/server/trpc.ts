@@ -1,7 +1,11 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import type { AppContext } from "./context";
 
-const t = initTRPC.context<AppContext>().create();
+// This Vite app calls procedures in-process via createCaller (no HTTP tRPC
+// server). tRPC v11 throws in the browser unless this is set.
+const t = initTRPC.context<AppContext>().create({
+  allowOutsideOfServer: true,
+});
 
 export const router = t.router;
 export const publicProcedure = t.procedure;

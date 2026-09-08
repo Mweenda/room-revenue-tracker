@@ -7,7 +7,9 @@ import {
   Bell, Shield, Phone, Mail, MapPin, Calendar,
   Edit3, Save, RefreshCw, HelpCircle, ExternalLink,
   ChevronDown, Hash, DollarSign, Users, BarChart3, Sun, Moon,
+  MessageCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useTrackerData } from "../hooks/useTrackerData";
 import { blocksInData, BILLING_MONTHS, formatBillingPeriodLabel, formatMonthYear, getCurrentBillingMonth, getCurrentYear, type BillingMonth } from "../lib/billing";
@@ -46,6 +48,7 @@ import { vacantBedsForGender } from "../lib/studentOnboarding";
 import { compactTitleVisible, headerCollapseProgress } from "../lib/studentPortalHeader";
 import { useStudentViewport } from "../hooks/useStudentViewport";
 import { lastVerifiedPayment } from "../lib/paymentsEdit";
+import { composeRentReminder, normalizeWhatsAppPhone, whatsappChatUrl } from "../lib/whatsapp";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
 import type { ApplyRentIncrementResult } from "./components/RentIncrementDialog";
@@ -253,6 +256,26 @@ function BedCard({ bed, billingRecord, lastPayment, onClick }: { bed: BedSpace; 
       )}
     </button>
   );
+}
+
+function openBedWhatsApp(bed: BedSpace, billing?: BillingRecord) {
+  try {
+    const url = whatsappChatUrl(
+      bed.student?.phone || billing?.phone_number || "",
+      composeRentReminder({
+        name: bed.student?.name || billing?.tenant_name || "there",
+        bedLabel: bed.identifier,
+        balance: billing?.total_balance ?? 0,
+        dueDate: billing?.target_month || "the 1st of the month",
+        daysPastDue: billing?.days_past_due ?? 0,
+        status: billing?.billing_status,
+      }),
+    );
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) window.location.href = url;
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Could not open WhatsApp");
+  }
 }
 
 // ─── Landlord Profile Page ────────────────────────────────────────────────────
@@ -1291,7 +1314,28 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, updateS
                 <div>
                   <span className="text-xs font-mono text-emerald-400 uppercase tracking-wider">{drawerBed.identifier}</span>
                   <p className="text-white font-bold text-lg mt-1">{displayOptional(drawerBed.student?.name)}</p>
-                  {br && <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold mt-2 ${s.badge}`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot}`}/>{br.billing_status === "OVERDUE / UNPAID" ? "Overdue" : br.billing_status}</span>}
+                  <div className="flex items-center gap-2 mt-2">
+                    {br && (
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${s.badge}`}>
+                        {br.billing_status === "OVERDUE / UNPAID"
+                          ? <AlertTriangle size={12} className="shrink-0" aria-hidden />
+                          : <span className={`w-1.5 h-1.5 rounded-full ${s.dot} shrink-0`} />}
+                        {br.billing_status === "OVERDUE / UNPAID" ? "Overdue" : br.billing_status}
+                      </span>
+                    )}
+                    {drawerBed.student && (
+                      <button
+                        type="button"
+                        onClick={() => openBedWhatsApp(drawerBed, br)}
+                        disabled={!normalizeWhatsAppPhone(drawerBed.student.phone || br?.phone_number)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#25D366] text-white hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100"
+                        title={normalizeWhatsAppPhone(drawerBed.student.phone || br?.phone_number) ? "Message on WhatsApp" : "No valid WhatsApp number"}
+                        aria-label="Message on WhatsApp"
+                      >
+                        <MessageCircle size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <button onClick={closeDrawer} className="text-slate-400 hover:text-white transition-colors p-1 ml-4"><X size={20} /></button>
               </div>

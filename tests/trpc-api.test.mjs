@@ -16,6 +16,11 @@ function walk(dir) {
   return files;
 }
 
+test("tRPC is allowed in the Vite browser bundle", () => {
+  const text = readFileSync(join(process.cwd(), "src/server/trpc.ts"), "utf8");
+  assert.match(text, /allowOutsideOfServer:\s*true/);
+});
+
 test("app code does not call Postgres rpc; tRPC procedures are the API", () => {
   const root = join(process.cwd(), "src");
   const allowed = new Set([
