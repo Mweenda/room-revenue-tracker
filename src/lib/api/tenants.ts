@@ -1,4 +1,6 @@
 import { getCurrentBillingMonth } from "../billing";
+import { displayOptional } from "../occupancy";
+import { dbFn } from "../../server/dbFn";
 import { getSupabase } from "../supabase";
 import { inviteStudentToPortal, normalizeEmail } from "../auth";
 import { contentTypeFor, describeStorageError, prepareUploadFile, storageObjectPath } from "../upload";
@@ -30,9 +32,9 @@ function mapOnboardRow(row: OnboardRpcRow, fallback: OnboardStudentInput): {
   const student: Student = {
     id: row.tenant_id,
     name: row.full_name,
-    phone: row.phone || "-",
-    email: row.email || "-",
-    nrc: row.nrc ?? "-",
+    phone: displayOptional(row.phone),
+    email: displayOptional(row.email),
+    nrc: displayOptional(row.nrc),
     moveInDate: moveIn,
     gender: fallback.gender ?? row.room_gender,
   };
@@ -54,7 +56,7 @@ function mapOnboardRow(row: OnboardRpcRow, fallback: OnboardStudentInput): {
     bed_space: row.bed_letter,
     room_gender: row.room_gender,
     tenant_name: row.full_name,
-    phone_number: row.phone || "-",
+    phone_number: displayOptional(row.phone),
     entry_date: moveIn,
     current_rent: rent,
     target_month: getCurrentBillingMonth(),
@@ -86,12 +88,12 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
   if (!sb) throw new Error("Supabase not configured");
 
   const moveIn = input.moveInDate || new Date().toISOString().slice(0, 10);
-  const { data, error } = await sb.rpc("onboard_student", {
+  const { data, error } = await dbFn(sb, "onboard_student", {
     p_bed_space_id: input.bedId,
     p_full_name: input.name,
     p_phone: input.phone || "",
     p_email: input.email,
-    p_nrc: input.nrc ?? "-",
+    p_nrc: displayOptional(input.nrc),
     p_move_in_date: moveIn,
     p_rent_amount: input.rentAmount ?? null,
     p_target_month: getCurrentBillingMonth(),
@@ -158,7 +160,7 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
       full_name: input.name,
       phone: input.phone || null,
       email: input.email ? normalizeEmail(input.email) : null,
-      nrc: input.nrc ?? "-",
+      nrc: displayOptional(input.nrc) || null,
       move_in_date: moveIn,
       gender: input.gender ?? bedRow.room_gender,
     })
@@ -175,7 +177,7 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
       bed_space: bedRow.bed_letter,
       room_gender: bedRow.room_gender,
       tenant_name: input.name,
-      phone_number: input.phone || "-",
+      phone_number: displayOptional(input.phone),
       entry_date: moveIn,
       current_rent: rent,
       target_month: getCurrentBillingMonth(),
@@ -241,7 +243,7 @@ export async function updateStudent(input: {
       full_name: input.name,
       phone: input.phone || null,
       email: input.email ? normalizeEmail(input.email) : null,
-      nrc: input.nrc ?? "-",
+      nrc: displayOptional(input.nrc) || null,
       move_in_date: input.moveInDate,
       ...(input.gender ? { gender: input.gender } : {}),
     })
@@ -261,7 +263,7 @@ export async function updateStudent(input: {
       .from("billing_records")
       .update({
         tenant_name: input.name,
-        phone_number: input.phone || "-",
+        phone_number: displayOptional(input.phone),
       })
       .eq("billing_id", bedSpace.id);
 
@@ -279,9 +281,9 @@ export async function updateStudent(input: {
   return {
     id: tenant.id,
     name: tenant.full_name,
-    phone: tenant.phone || "-",
-    email: tenant.email || "-",
-    nrc: tenant.nrc ?? "-",
+    phone: displayOptional(tenant.phone),
+    email: displayOptional(tenant.email),
+    nrc: displayOptional(tenant.nrc),
     moveInDate: tenant.move_in_date ?? input.moveInDate,
     gender: tenant.gender ?? input.gender,
   };
@@ -299,7 +301,7 @@ export async function vacateBedSpace(bedId: string): Promise<void> {
 
   // Soft-delete through the audited RPC. A hard delete would drop history and
   // (after migration 007) is no longer allowed by RLS.
-  const { error } = await sb.rpc("evict_tenant", {
+  const { error } = await dbFn(sb, "evict_tenant", {
     p_tenant_id: tenant.id,
     p_reason: "Marked vacant from occupancy portal",
     p_status: "moved_out",
@@ -342,7 +344,7 @@ export async function listVacantBedsForOnboarding(gender: RoomGender): Promise<B
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
-  const { data, error } = await sb.rpc("vacant_beds_for_onboarding", { p_gender: gender });
+  const { data, error } = await dbFn(sb, "vacant_beds_for_onboarding", { p_gender: gender });
   if (error) throw error;
 
   return (data ?? []).map((row: {
@@ -377,12 +379,12 @@ export async function completeStudentOnboarding(input: {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
-  const { data, error } = await sb.rpc("complete_student_onboarding", {
+  const { data, error } = await dbFn(sb, "complete_student_onboarding", {
     p_gender: input.gender,
     p_bed_space_id: input.bedId,
     p_full_name: input.name,
     p_phone: input.phone || "",
-    p_nrc: input.nrc ?? "-",
+    p_nrc: displayOptional(input.nrc),
     p_move_in_date: input.moveInDate,
   });
   if (error) throw error;
@@ -402,9 +404,9 @@ export async function completeStudentOnboarding(input: {
   return {
     id: row.tenant_id,
     name: row.full_name,
-    phone: row.phone || "-",
-    email: row.email || "",
-    nrc: row.nrc ?? "-",
+    phone: displayOptional(row.phone),
+    email: displayOptional(row.email),
+    nrc: displayOptional(row.nrc),
     moveInDate: row.move_in_date ?? input.moveInDate,
     gender: row.gender ?? input.gender,
   };

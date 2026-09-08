@@ -56,6 +56,25 @@ test("the student APK stays on /student so it never opens the landlord landing p
   assert.equal(app.studentShellLocation("/", "", {}, true), "/student");
 });
 
+test("a browser visit to /student does not pin the landlord landing page", () => {
+  const memory = new Map([[app.STUDENT_SHELL_STORAGE_KEY, "1"]]);
+  const storage = {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => { memory.set(key, value); },
+    removeItem: (key) => { memory.delete(key); },
+  };
+  assert.equal(app.detectStudentNativeShell({
+    pathname: "/", search: "", userAgent: "Mozilla/5.0 Chrome/122.0.0.0", capacitorNative: false, storage,
+  }), false);
+  assert.equal(storage.getItem(app.STUDENT_SHELL_STORAGE_KEY), null);
+  assert.equal(app.detectStudentNativeShell({
+    pathname: "/student", search: "", userAgent: "Mozilla/5.0 Chrome/122.0.0.0", capacitorNative: false, storage,
+  }), true);
+  assert.equal(app.detectStudentNativeShell({
+    pathname: "/", search: "", userAgent: "RoomRevenueStudent/1.1.3", capacitorNative: false, storage,
+  }), true);
+});
+
 test("the welcome ad shows once per student and skips guests", () => {
   const memory = new Map();
   const storage = {

@@ -6,6 +6,7 @@ import {
   getDaysPastDue,
   type BillingMonth,
 } from "./billing";
+import { isVacantName, vacantBillingPatch } from "./occupancy";
 import type { BillingRecord } from "./types";
 
 export type PaymentWindow = "days-1-5" | "days-20-30" | "mid-month";
@@ -152,18 +153,9 @@ export function rollBillingRecord(
   currentMonth: BillingMonth = getCurrentBillingMonth(),
   today = new Date(),
 ): BillingRecord {
-  const vacant =
-    record.billing_status === "Vacant" || record.tenant_name.trim().toLowerCase() === "vacant";
+  const vacant = record.billing_status === "Vacant" || isVacantName(record.tenant_name);
   if (vacant) {
-    return {
-      ...record,
-      tenant_name: record.tenant_name.trim() || "Vacant",
-      target_month: "-",
-      accumulated_total: 0,
-      total_balance: 0,
-      days_past_due: 0,
-      billing_status: "Vacant",
-    };
+    return { ...record, ...vacantBillingPatch() };
   }
 
   const targetMonth =
@@ -210,8 +202,8 @@ export function rollBillingRecords(
 }
 
 export function occupancyReport(records: BillingRecord[]) {
-  const occupied = records.filter((r) => r.billing_status !== "Vacant" && r.tenant_name.trim().toLowerCase() !== "vacant");
-  const vacant = records.filter((r) => r.billing_status === "Vacant" || r.tenant_name.trim().toLowerCase() === "vacant");
+  const occupied = records.filter((r) => r.billing_status !== "Vacant" && !isVacantName(r.tenant_name));
+  const vacant = records.filter((r) => r.billing_status === "Vacant" || isVacantName(r.tenant_name));
   const maleVacant = vacant.filter((r) => r.room_gender === "Male").length;
   const femaleVacant = vacant.filter((r) => r.room_gender === "Female").length;
   return {
@@ -224,12 +216,14 @@ export function occupancyReport(records: BillingRecord[]) {
     femaleVacant,
     maleOccupied: occupied.filter((r) => r.room_gender === "Male").length,
     femaleOccupied: occupied.filter((r) => r.room_gender === "Female").length,
+    maleBeds: records.filter((r) => r.room_gender === "Male").length,
+    femaleBeds: records.filter((r) => r.room_gender === "Female").length,
   };
 }
 
 export function vacantBedRows(records: BillingRecord[]) {
   return records
-    .filter((r) => r.billing_status === "Vacant" || r.tenant_name.trim().toLowerCase() === "vacant")
+    .filter((r) => r.billing_status === "Vacant" || isVacantName(r.tenant_name))
     .map((r) => ({
       billingId: r.billing_id,
       block: r.house_block,
@@ -254,7 +248,7 @@ export function paymentWindowGroups(records: BillingRecord[]): PaymentWindowGrou
   };
 
   for (const record of records) {
-    if (record.billing_status === "Vacant" || record.tenant_name.trim().toLowerCase() === "vacant") continue;
+    if (record.billing_status === "Vacant" || isVacantName(record.tenant_name)) continue;
     const window = paymentWindowForEntry(record.entry_date);
     if (!window) continue;
     buckets[window].push({

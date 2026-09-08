@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Image as ImageIcon,
   RefreshCw,
+  Upload,
   Wrench,
   X,
 } from "lucide-react";
@@ -29,6 +30,8 @@ import {
   type BillingMonth,
 } from "../../lib/billing";
 import { buildFinancialReport, exportFinancialWorkbook } from "../../lib/export/financialWorkbook";
+import { bytesToBase64 } from "../../lib/spreadsheet/base64";
+import { createLandlordCaller, downloadBlobFromBase64 } from "../../lib/trpc";
 import type {
   BedSpace,
   BillingRecord,
@@ -74,10 +77,12 @@ export type ReportsViewProps = {
   utilities: UtilityBlock[];
   canExport: boolean;
   updateIssueStatus: (id: string, status: IssueStatus, resolutionNote?: string) => Promise<void>;
+  initialSubView?: ReportsSubView;
+  onRefresh?: () => Promise<unknown> | void;
 };
 
 export default function ReportsView(props: ReportsViewProps) {
-  const [subView, setSubView] = useState<ReportsSubView>("hub");
+  const [subView, setSubView] = useState<ReportsSubView>(props.initialSubView ?? "hub");
 
   const openIssues = props.issues.filter((issue) => issue.status === "open").length;
   const outstanding = props.billingRecords.reduce((sum, record) => sum + record.total_balance, 0);
@@ -108,7 +113,7 @@ export default function ReportsView(props: ReportsViewProps) {
       <div className="grid gap-4 md:grid-cols-2">
         <NavCard
           title="Financial Reports"
-          description="Export a formatted Excel workbook for any month — occupancy, expected versus collected revenue, the billing roster, payments and utilities."
+          description="Export a formatted Excel workbook for any month, or upload the boarding-house spreadsheet so Master Roster, billing, and the payments archive stay in sync with live balances."
           icon={FileSpreadsheet}
           accent="bg-emerald-50 text-emerald-700"
           onClick={() => setSubView("financial")}
@@ -155,10 +160,11 @@ function BackLink({ label, onBack }: { label: string; onBack: () => void }) {
 
 // ─── Financial ───────────────────────────────────────────────────────────────
 
-function FinancialReports({ beds, billingRecords, payments, utilities, canExport }: ReportsViewProps) {
+function FinancialReports({ beds, billingRecords, payments, utilities, canExport, onRefresh }: ReportsViewProps) {
   const [month, setMonth] = useState<BillingMonth>(() => getCurrentBillingMonth());
   const [year, setYear] = useState(() => getCurrentYear());
   const [exporting, setExporting] = useState(false);
+  const [syncing, setSyncing] = useState<"upload" | "download" | null>(null);
 
   const monthOptions = useMemo(() => billingMonthOptions(year), [year]);
   const yearOptions = useMemo(() => {
@@ -185,6 +191,51 @@ function FinancialReports({ beds, billingRecords, payments, utilities, canExport
       });
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleBoardingHouseUpload(file: File | undefined) {
+    if (!file) return;
+    setSyncing("upload");
+    try {
+      if (!canExport) throw new Error("Landlord access is required to import a boarding-house spreadsheet");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const caller = await createLandlordCaller();
+      const result = await caller.spreadsheet.upload({
+        filename: file.name,
+        fileBase64: bytesToBase64(bytes),
+      });
+      toast.success("Spreadsheet synced", {
+        description: `${result.recordsSynced.payments} payments, ${result.recordsSynced.billing} billing rows, ${result.recordsSynced.roster} roster rents`,
+      });
+      await onRefresh?.();
+    } catch (err) {
+      toast.error("Spreadsheet import failed", {
+        description: err instanceof Error ? err.message : "Could not parse or sync the workbook",
+      });
+    } finally {
+      setSyncing(null);
+    }
+  }
+
+  async function handleBoardingHouseDownload() {
+    setSyncing("download");
+    try {
+      if (!canExport) throw new Error("Landlord access is required to download the boarding-house spreadsheet");
+      const caller = await createLandlordCaller();
+      const result = await caller.spreadsheet.download();
+      downloadBlobFromBase64(
+        result.fileBase64,
+        result.filename,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      toast.success("Boarding house workbook downloaded");
+    } catch (err) {
+      toast.error("Download failed", {
+        description: err instanceof Error ? err.message : "Could not generate the workbook",
+      });
+    } finally {
+      setSyncing(null);
     }
   }
 
@@ -269,6 +320,43 @@ function FinancialReports({ beds, billingRecords, payments, utilities, canExport
               value={`${report.summary.occupancyRate}%`}
               sub={`${report.summary.occupiedBeds} of ${report.summary.occupiedBeds + report.summary.vacantBeds} beds`}
             />
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Boarding house workbook</p>
+              <p className="mt-1 text-sm text-slate-500 leading-relaxed">
+                Upload the Master Roster / Payments Log Archive / Monthly Billing Tab workbook. New cash receipts
+                are appended without duplicating existing bed+month amounts. Download rebuilds every tab from live
+                balances, with occupancy totals that include occupied beds.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <label className={`${buttonStyles.outline} cursor-pointer ${!canExport || syncing ? "pointer-events-none opacity-60" : ""}`}>
+                <Upload size={14} />
+                {syncing === "upload" ? "Syncing…" : "Upload .xlsx"}
+                <input
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="sr-only"
+                  disabled={!canExport || Boolean(syncing)}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    void handleBoardingHouseUpload(file);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void handleBoardingHouseDownload()}
+                disabled={!canExport || Boolean(syncing)}
+                className={buttonStyles.primary}
+              >
+                <Download size={14} />
+                {syncing === "download" ? "Building…" : "Download latest"}
+              </button>
+            </div>
           </div>
 
           <div>

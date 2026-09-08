@@ -10,7 +10,8 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Badge, buttonStyles, inputStyles } from "./primitives";
-import { BLOCKS, fmtKwacha } from "../../lib/billing";
+import { BLOCKS, blocksInData, fmtKwacha } from "../../lib/billing";
+import { displayOptional } from "../../lib/occupancy";
 import { buildRentPreview, summarizePreview, type RentIncreaseMode, type RentScope } from "../../lib/rent";
 import type { BedSpace, BlockCode } from "../../lib/types";
 
@@ -37,7 +38,8 @@ export default function RentIncrementDialog({ open, onOpenChange, beds, onApply 
   const [mode, setMode] = useState<RentIncreaseMode>("percentage");
   const [rawValue, setRawValue] = useState("5");
   const [scopeKind, setScopeKind] = useState<ScopeKind>("all");
-  const [blockCode, setBlockCode] = useState<BlockCode>(BLOCKS[0]);
+  const blocks = useMemo(() => blocksInData(beds), [beds]);
+  const [blockCode, setBlockCode] = useState<BlockCode>(blocks[0] ?? BLOCKS[0]);
   const [selectedBedIds, setSelectedBedIds] = useState<string[]>([]);
   const [effectiveDate, setEffectiveDate] = useState(() => {
     const next = new Date();
@@ -203,7 +205,7 @@ export default function RentIncrementDialog({ open, onOpenChange, beds, onApply 
                 className={inputStyles}
                 aria-label="Block"
               >
-                {BLOCKS.map((block) => <option key={block} value={block}>{block}</option>)}
+                {blocks.map((block) => <option key={block} value={block}>{block}</option>)}
               </select>
             )}
 
@@ -221,7 +223,7 @@ export default function RentIncrementDialog({ open, onOpenChange, beds, onApply 
                       className="w-4 h-4 accent-emerald-600"
                     />
                     <span className="font-mono text-xs text-slate-500 w-24 shrink-0">{bed.id}</span>
-                    <span className="text-sm text-slate-800 flex-1 truncate">{bed.student?.name}</span>
+                    <span className="text-sm text-slate-800 flex-1 truncate">{displayOptional(bed.student?.name)}</span>
                     <span className="text-sm font-semibold text-slate-600">{fmtKwacha(bed.rentAmount)}</span>
                   </label>
                 ))}
@@ -261,7 +263,7 @@ export default function RentIncrementDialog({ open, onOpenChange, beds, onApply 
                       <tr key={row.bedId} className="hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-2 font-mono text-xs text-slate-500">{row.label}</td>
                         <td className="px-4 py-2 text-slate-700 truncate max-w-[10rem]">
-                          {row.studentName ?? <span className="text-slate-400 italic">Vacant</span>}
+                          {displayOptional(row.studentName)}
                         </td>
                         <td className="px-4 py-2 text-right text-slate-500">{fmtKwacha(row.oldRent)}</td>
                         <td className="px-4 py-2 text-right font-semibold text-slate-900">

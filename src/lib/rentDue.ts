@@ -1,4 +1,5 @@
 import { BILLING_MONTHS, GRACE_PERIOD_DAYS, getCurrentYear, getDaysPastDue, type BillingMonth } from "./billing";
+import { isVacantName } from "./occupancy";
 import type { BillingRecord } from "./types";
 
 export type DueEventKind = "due" | "grace" | "overdue";
@@ -45,7 +46,7 @@ export function calendarDueEvents(
 ): CalendarDueEvent[] {
   const events: CalendarDueEvent[] = [];
   for (const record of records) {
-    if (record.billing_status === "Vacant" || record.tenant_name.trim().toLowerCase() === "vacant") continue;
+    if (record.billing_status === "Vacant" || isVacantName(record.tenant_name)) continue;
     const date = rentDueDateIso(record.target_month, year);
     if (!date) continue;
     const daysPastDue = daysPastDueFromCalendar(record.target_month, year, today);

@@ -67,8 +67,8 @@ function mapTenantRow(row: {
     name: row.full_name,
     email: row.email ?? fallbackEmail ?? '',
     phone: row.phone ?? '-',
-    nrc: row.nrc ?? '-',
-    moveInDate: row.move_in_date ?? '-',
+    nrc: row.nrc && row.nrc !== '-' ? row.nrc : '',
+    moveInDate: row.move_in_date && row.move_in_date !== '-' ? row.move_in_date : '',
     bedSpaceId: row.bed_space_id,
     profileImageUrl: row.profile_image_url ?? undefined,
   };
@@ -129,11 +129,13 @@ export async function tenantExistsForEmail(email: string): Promise<boolean> {
   if (!sb) return false;
 
   const normalized = normalizeEmail(email);
-  const { data, error } = await sb.rpc('tenant_exists_for_email', { p_email: normalized });
-  if (!error) return data === true;
-
-  const tenant = await fetchTenantByEmail(normalized);
-  return Boolean(tenant);
+  try {
+    const { createAppCaller } = await import('./trpc');
+    return await (await createAppCaller()).auth.tenantExists({ email: normalized });
+  } catch {
+    const tenant = await fetchTenantByEmail(normalized);
+    return Boolean(tenant);
+  }
 }
 
 export async function inviteStudentToPortal(email: string, _name: string): Promise<{ success: boolean; message: string }> {
@@ -356,24 +358,36 @@ type LandlordProfile = {
  * to a direct lookup so the app keeps working before that migration is applied.
  */
 async function resolveLandlordProfile(
-  sb: import('@supabase/supabase-js').SupabaseClient,
+  _sb: import('@supabase/supabase-js').SupabaseClient,
   email: string,
 ): Promise<LandlordProfile | null> {
-  const { data, error } = await sb.rpc('link_landlord_profile');
-  if (!error) {
-    const rows = (data ?? []) as Array<LandlordProfile & { profile_id: string }>;
-    const row = rows[0];
-    return row ? { ...row, id: row.profile_id } : null;
+  try {
+    const { createAppCaller, invalidateAppCaller } = await import('./trpc');
+    invalidateAppCaller();
+    const profile = await (await createAppCaller()).auth.linkLandlordProfile();
+    if (!profile) return null;
+    return {
+      id: profile.id,
+      role: profile.role,
+      full_name: profile.full_name,
+      email: profile.email,
+      phone: profile.phone,
+      address: profile.address,
+      bio: profile.bio,
+    };
+  } catch {
+    const { getSupabase } = await import('./supabase');
+    const sb = getSupabase();
+    if (!sb) return null;
+    const { data: fallback, error: fallbackError } = await sb
+      .from('profiles')
+      .select('id, role, full_name, email, phone, address, bio')
+      .eq('role', 'landlord')
+      .ilike('email', email)
+      .maybeSingle();
+    if (fallbackError) throw fallbackError;
+    return (fallback as LandlordProfile | null) ?? null;
   }
-
-  const { data: fallback, error: fallbackError } = await sb
-    .from('profiles')
-    .select('id, role, full_name, email, phone, address, bio')
-    .eq('role', 'landlord')
-    .ilike('email', email)
-    .maybeSingle();
-  if (fallbackError) throw fallbackError;
-  return (fallback as LandlordProfile | null) ?? null;
 }
 
 export async function landlordLogin(credentials: LoginCredentials): Promise<{ success: boolean; user?: any; message: string }> {
@@ -494,8 +508,10 @@ export async function adminLogin(credentials: LoginCredentials): Promise<{ succe
     return { success: false, message: 'Invalid admin email or password' };
   }
 
-  const { data: isAdmin, error: rpcError } = await sb.rpc('is_admin');
-  if (rpcError || !isAdmin) {
+  const { createAppCaller, invalidateAppCaller } = await import('./trpc');
+  invalidateAppCaller();
+  const isAdmin = await (await createAppCaller()).auth.isAdmin();
+  if (!isAdmin) {
     await sb.auth.signOut();
     return { success: false, message: 'This account is not an RRT admin.' };
   }

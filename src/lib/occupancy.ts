@@ -16,8 +16,45 @@ export interface OccupancyIssue {
   details: string;
 }
 
+/** True when a billing/tenant name is missing — not a real occupant. */
+export function isVacantName(name?: string | null): boolean {
+  const value = (name ?? "").trim().toLowerCase();
+  return value === "" || value === "vacant" || value === "-";
+}
+
+/** Blank UI value for missing contact/date fields. Hides "-" and "Vacant". */
+export function displayOptional(value?: string | null): string {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed || trimmed === "-" || trimmed.toLowerCase() === "vacant") return "";
+  return trimmed;
+}
+
+/** Fields written when a bed has no tenant. Status stays Vacant; names stay empty. */
+export function vacantBillingPatch(): Pick<
+  BillingRecord,
+  | "tenant_name"
+  | "phone_number"
+  | "entry_date"
+  | "target_month"
+  | "accumulated_total"
+  | "total_balance"
+  | "days_past_due"
+  | "billing_status"
+> {
+  return {
+    tenant_name: "",
+    phone_number: "",
+    entry_date: "",
+    target_month: "",
+    accumulated_total: 0,
+    total_balance: 0,
+    days_past_due: 0,
+    billing_status: "Vacant",
+  };
+}
+
 export function bedHasTenant(bed: BedSpace): boolean {
-  return Boolean(bed.student?.id && bed.student.name.trim().toLowerCase() !== "vacant");
+  return Boolean(bed.student?.id && !isVacantName(bed.student.name));
 }
 
 /** Digits-only form of a tenant phone. Empty / "-" is treated as missing. */
@@ -52,7 +89,7 @@ export function assertUniqueActivePhone(
 
 export function isBillingVacant(record?: BillingRecord): boolean {
   if (!record) return true;
-  return record.billing_status === "Vacant" || record.tenant_name.trim().toLowerCase() === "vacant";
+  return record.billing_status === "Vacant" || isVacantName(record.tenant_name);
 }
 
 /** A bed is assignable when it has no tenant (tenants table is source of truth). */
@@ -199,15 +236,8 @@ export function reconcileBedsLocal(
         room_number: billing?.room_number ?? String(bed.roomNumber),
         bed_space: billing?.bed_space ?? bed.bedLetter,
         room_gender: billing?.room_gender ?? bed.roomGender ?? "Male",
-        tenant_name: "Vacant",
-        phone_number: "-",
-        entry_date: "-",
         current_rent: billing?.current_rent ?? bed.rentAmount,
-        target_month: "-",
-        accumulated_total: 0,
-        total_balance: 0,
-        days_past_due: 0,
-        billing_status: "Vacant",
+        ...vacantBillingPatch(),
       };
       if (idx >= 0) nextBilling[idx] = vacantRecord;
       else nextBilling.push(vacantRecord);

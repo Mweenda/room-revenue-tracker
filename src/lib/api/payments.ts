@@ -1,3 +1,4 @@
+import { dbFn } from "../../server/dbFn";
 import { getSupabase } from "../supabase";
 import type { Payment, SubmitPaymentInput } from "../types";
 import { mapPayment } from "./mappers";
@@ -57,7 +58,7 @@ export async function recordManualPayment(input: {
   const submittedAt = input.submittedAt || new Date().toISOString().slice(0, 10);
   const ref = input.transactionRef?.trim() || `CASH-${submittedAt.replace(/-/g, "")}`;
 
-  const { data, error } = await sb.rpc("record_manual_payment", {
+  const { data, error } = await dbFn(sb, "record_manual_payment", {
     p_bed_space_id: input.bedSpaceId,
     p_student_name: input.studentName,
     p_amount: input.amount,
@@ -101,7 +102,7 @@ export async function verifyPayment(id: string): Promise<Payment> {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
-  const { data, error } = await sb.rpc("verify_payment", { p_payment_id: id });
+  const { data, error } = await dbFn(sb, "verify_payment", { p_payment_id: id });
   if (!error && data) return mapPayment(data);
 
   // Fallback until migration 007 is applied.
@@ -122,7 +123,7 @@ export async function rejectPayment(id: string, reason: string): Promise<Payment
   const trimmed = reason.trim();
   if (!trimmed) throw new Error("A rejection reason is required");
 
-  const { data, error } = await sb.rpc("reject_payment", { p_payment_id: id, p_reason: trimmed });
+  const { data, error } = await dbFn(sb, "reject_payment", { p_payment_id: id, p_reason: trimmed });
   if (!error && data) return mapPayment(data);
 
   const { data: row, error: updateError } = await sb
@@ -161,7 +162,7 @@ export async function updatePayment(input: {
     input,
   );
 
-  const { data, error } = await sb.rpc("update_payment", {
+  const { data, error } = await dbFn(sb, "update_payment", {
     p_payment_id: edited.id,
     p_student_name: edited.studentName,
     p_bed_space_id: edited.bedSpaceId,

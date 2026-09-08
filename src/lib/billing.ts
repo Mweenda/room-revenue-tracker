@@ -1,3 +1,4 @@
+import { isVacantName } from "./occupancy";
 import type { BillingRecord, BillingStatus, BlockCode, UtilityBlock } from "./types";
 
 export const OWNER_UTILITY_CAP = 70;
@@ -8,7 +9,21 @@ const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 export const BILLING_MONTHS = [...MONTH_ABBR];
 export type BillingMonth = (typeof MONTH_ABBR)[number];
 
-export const BLOCKS: BlockCode[] = ["BBH", "NWG", "ANX", "CRV"];
+export const BLOCKS: BlockCode[] = ["BBH", "UPV", "CRV", "ANX", "NWG"];
+
+/** Blocks actually present on the property, in house order, then any extras. */
+export function blocksInData(
+  items: Array<{ blockCode?: string; house_block?: string }>,
+): BlockCode[] {
+  const seen = new Set<string>();
+  for (const item of items) {
+    const code = item.blockCode ?? item.house_block;
+    if (code) seen.add(code);
+  }
+  if (seen.size === 0) return [...BLOCKS];
+  const extras = [...seen].filter((code) => !(BLOCKS as string[]).includes(code)).sort();
+  return [...BLOCKS.filter((code) => seen.has(code)), ...extras] as BlockCode[];
+}
 
 export function getCurrentYear(): number {
   return new Date().getFullYear();
@@ -72,7 +87,7 @@ export function formatBillingPeriodLabel(targetMonth?: string, year = getCurrent
 }
 
 export function refreshBillingRecord(record: BillingRecord): BillingRecord {
-  if (record.billing_status === "Vacant" || record.tenant_name.trim().toLowerCase() === "vacant") {
+  if (record.billing_status === "Vacant" || isVacantName(record.tenant_name)) {
     return record;
   }
 
@@ -113,7 +128,7 @@ export function computeBillingStatus(
   targetMonth: string,
   currentMonth: string = getCurrentBillingMonth(),
 ): BillingStatus {
-  if (!tenantName || tenantName.trim().toLowerCase() === "vacant") return "Vacant";
+  if (isVacantName(tenantName)) return "Vacant";
   if (totalBalance === 0) return "Paid / Secured";
   if (isOverdueAfterGrace(daysPastDue, totalBalance)) return "OVERDUE / UNPAID";
   if (totalBalance > 0 && daysPastDue >= 1 && daysPastDue <= GRACE_PERIOD_DAYS) return "Grace Period";

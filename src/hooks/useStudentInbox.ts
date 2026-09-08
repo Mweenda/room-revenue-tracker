@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ensureRentDueNotification, fetchStudentNotifications, markStudentNotificationRead } from "../lib/api/notifications";
+import { ensureRentDueNotification, fetchStudentNotifications, markStudentNotificationRead } from "../lib/api";
 import { isSupabaseConfigured } from "../lib/supabase";
 import {
   deriveLocalInbox,

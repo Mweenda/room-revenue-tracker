@@ -1,3 +1,4 @@
+import { displayOptional, isVacantName } from "../occupancy";
 import type {
   BedSpace,
   BillingRecord,
@@ -86,10 +87,10 @@ function mapStudent(t: NonNullable<BedRow["tenants"]>[number]): Student {
   return {
     id: t.id,
     name: t.full_name,
-    phone: t.phone ?? "-",
-    nrc: t.nrc ?? "-",
-    email: t.email ?? "",
-    moveInDate: t.move_in_date ?? "-",
+    phone: displayOptional(t.phone),
+    nrc: displayOptional(t.nrc),
+    email: displayOptional(t.email),
+    moveInDate: displayOptional(t.move_in_date),
     profileImageUrl: t.profile_image_url ?? undefined,
     gender: t.gender ?? undefined,
   };
@@ -118,11 +119,11 @@ export function mapBilling(row: BillingRow): BillingRecord {
     room_number: row.room_number,
     bed_space: row.bed_space,
     room_gender: row.room_gender,
-    tenant_name: row.tenant_name,
-    phone_number: row.phone_number,
-    entry_date: row.entry_date,
+    tenant_name: isVacantName(row.tenant_name) ? "" : row.tenant_name,
+    phone_number: isVacantName(row.tenant_name) ? "" : displayOptional(row.phone_number),
+    entry_date: isVacantName(row.tenant_name) ? "" : displayOptional(row.entry_date),
     current_rent: Number(row.current_rent),
-    target_month: row.target_month,
+    target_month: isVacantName(row.tenant_name) ? "" : displayOptional(row.target_month),
     accumulated_total: Number(row.accumulated_total),
     total_balance: Number(row.total_balance),
     days_past_due: row.days_past_due,

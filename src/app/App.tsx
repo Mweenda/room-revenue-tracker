@@ -10,9 +10,10 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useTrackerData } from "../hooks/useTrackerData";
-import { BLOCKS, BILLING_MONTHS, formatBillingPeriodLabel, formatMonthYear, getCurrentBillingMonth, getCurrentYear, type BillingMonth } from "../lib/billing";
+import { blocksInData, BILLING_MONTHS, formatBillingPeriodLabel, formatMonthYear, getCurrentBillingMonth, getCurrentYear, type BillingMonth } from "../lib/billing";
+import { occupancyReport } from "../lib/paymentTracking";
 import { formatHeaderDateTime, useLiveDateTime } from "../hooks/useLiveDateTime";
-import { isBedAssignable } from "../lib/occupancy";
+import { isBedAssignable, displayOptional, isBillingVacant, isVacantName } from "../lib/occupancy";
 import { LandingPage } from "../components/LandingPage";
 import { StudentLogin } from "../components/StudentLogin";
 import StudentOnboarding from "../components/StudentOnboarding";
@@ -33,10 +34,18 @@ import { StudentCollapsingHeader } from "./components/StudentCollapsingHeader";
 import { StudentPortalNav } from "./components/StudentPortalNav";
 import { StudentWelcomeAd } from "./components/StudentWelcomeAd";
 import { useStudentInbox } from "../hooks/useStudentInbox";
+import { useLandlordInbox } from "../hooks/useLandlordInbox";
+import { LandlordNotificationBell } from "./components/LandlordNotificationBell";
+import {
+  landlordNotificationView,
+  type LandlordNotification,
+  type LandlordNotificationKind,
+} from "../lib/landlordNotifications";
 import { isStudentNativeShell, pinStudentShellLocation, shouldShowWelcomeAd, studentShellLocation } from "../lib/studentApp";
 import { vacantBedsForGender } from "../lib/studentOnboarding";
 import { compactTitleVisible, headerCollapseProgress } from "../lib/studentPortalHeader";
 import { useStudentViewport } from "../hooks/useStudentViewport";
+import { lastVerifiedPayment } from "../lib/paymentsEdit";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
 import type { ApplyRentIncrementResult } from "./components/RentIncrementDialog";
@@ -220,7 +229,7 @@ function UserMenu({ name, role, onLogout, onProfile, onSettings, dark = false, d
 
 // ─── Bed Card Component ───────────────────────────────────────────────────────
 
-function BedCard({ bed, billingRecord, onClick }: { bed: BedSpace; billingRecord?: BillingRecord; onClick: () => void }) {
+function BedCard({ bed, billingRecord, lastPayment, onClick }: { bed: BedSpace; billingRecord?: BillingRecord; lastPayment?: Payment | null; onClick: () => void }) {
   const status = billingRecord?.billing_status ?? (bed.status === "vacant" ? "Vacant" : "Open Window");
   const style = billingStatusStyle[status];
 
@@ -234,9 +243,14 @@ function BedCard({ bed, billingRecord, onClick }: { bed: BedSpace; billingRecord
         <span className="font-mono text-[9px] font-bold text-slate-500 uppercase tracking-wide">{bed.identifier}</span>
       </div>
       <p className={`text-[11px] font-semibold ${style.text} line-clamp-2 flex-1 leading-snug`}>
-        {bed.student?.name ?? (bed.roomGender ? `Vacant · ${bed.roomGender}` : "Vacant")}
+        {displayOptional(bed.student?.name)}
       </p>
       <p className="text-[10px] font-mono text-slate-400 font-medium">{fmt(bed.rentAmount)}</p>
+      {lastPayment && (
+        <p className="text-[9px] text-slate-500 font-medium leading-tight">
+          Last {fmt(lastPayment.amount)} · {lastPayment.submittedAt}
+        </p>
+      )}
     </button>
   );
 }
@@ -255,6 +269,7 @@ function LandlordProfile({ beds, billingRecords, landlord, onSave }: { beds: Bed
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const blocks = blocksInData(beds);
   const totalOccupied = beds.filter((b) => b.status === "occupied").length;
   const totalRevenue = billingRecords.reduce((s, r) => s + r.current_rent, 0);
   const overdueCount = billingRecords.filter((r) => r.billing_status === "OVERDUE / UNPAID").length;
@@ -336,7 +351,7 @@ function LandlordProfile({ beds, billingRecords, landlord, onSave }: { beds: Bed
         <div className="space-y-4">
           <SectionCard title="Portfolio Overview">
             <div className="p-5 space-y-1">
-              <InfoRow label="Residential Blocks" value="4 (BBH, NWG, ANX, CRV)" icon={Building2} />
+              <InfoRow label="Residential Blocks" value={`${blocks.length} (${blocks.join(", ")})`} icon={Building2} />
               <InfoRow label="Total Bed Spaces" value={`${beds.length} beds`} icon={Hash} />
               <InfoRow label="Active Tenants" value={`${totalOccupied} tenants`} icon={Users} />
               <InfoRow label="Vacant Beds" value={`${beds.filter(b => b.status === "vacant").length} available`} icon={Home} />
@@ -348,10 +363,10 @@ function LandlordProfile({ beds, billingRecords, landlord, onSave }: { beds: Bed
 
           <SectionCard title="Block Occupancy">
             <div className="p-5 space-y-3">
-              {BLOCKS.map((code) => {
+              {blocks.map((code) => {
                 const total = beds.filter((b) => b.blockCode === code).length;
                 const occ = beds.filter((b) => b.blockCode === code && b.status === "occupied").length;
-                const pct = Math.round((occ / total) * 100);
+                const pct = total ? Math.round((occ / total) * 100) : 0;
                 return (
                   <div key={code} className="flex items-center gap-3">
                     <span className="font-mono text-xs font-bold text-slate-600 w-10">{code}</span>
@@ -611,7 +626,7 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
         name: form.name,
         phone: form.phone,
         email: form.email,
-        nrc: form.nrc || "-",
+        nrc: form.nrc,
         moveInDate: bed.student.moveInDate,
         sendLoginLink: true,
       });
@@ -684,7 +699,7 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
             <div>
               <p className={`text-xs font-bold uppercase tracking-wider ${style.text} mb-1`}>Current Billing Status</p>
               <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{billingRecord.total_balance === 0 ? "Account Fully Settled" : `Balance Due: ${fmt(billingRecord.total_balance)}`}</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Target month: {billingRecord.target_month} · Rent: {fmt(billingRecord.current_rent)}/mo</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{displayOptional(billingRecord.target_month) ? `Target month: ${billingRecord.target_month} · ` : ""}Rent: {fmt(billingRecord.current_rent)}/mo</p>
             </div>
             <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${style.badge} shrink-0`}>
               <span className={`w-2 h-2 rounded-full ${style.dot}`} />
@@ -700,7 +715,7 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
             <Field label="Full Name" value={form.name} onChange={(v) => setForm(f => ({ ...f, name: v }))} disabled={!editMode} />
             <Field label="Phone Number" value={form.phone} onChange={(v) => setForm(f => ({ ...f, phone: v }))} disabled={!editMode} />
             <Field label="Email Address" value={form.email} onChange={(v) => setForm(f => ({ ...f, email: v }))} type="email" disabled={!editMode} />
-            <Field label="NRC / ID Number" value={form.nrc === "-" ? "" : form.nrc} onChange={(v) => setForm(f => ({ ...f, nrc: v }))} placeholder="123456/10/1" disabled={!editMode} />
+            <Field label="NRC / ID Number" value={displayOptional(form.nrc)} onChange={(v) => setForm(f => ({ ...f, nrc: v }))} placeholder="123456/10/1" disabled={!editMode} />
           </div>
         </div>
       </SectionCard>
@@ -712,7 +727,7 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
           <InfoRow label="Bed Letter" value={bed.bedLetter} icon={Hash} />
           <InfoRow label="Bed Identifier" value={bed.identifier} icon={Hash} mono />
           <InfoRow label="Monthly Rent" value={fmt(bed.rentAmount)} icon={DollarSign} />
-          <InfoRow label="Move-in Date" value={bed.student?.moveInDate ?? "—"} icon={Calendar} />
+          <InfoRow label="Move-in Date" value={displayOptional(bed.student?.moveInDate)} icon={Calendar} />
         </div>
       </SectionCard>
     </div>
@@ -849,6 +864,7 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
   const [filterBlock, setFilterBlock] = useState<BlockCode | "ALL">("ALL");
   const [filterStatus, setFilterStatus] = useState<BillingStatus | "ALL">("ALL");
   const [filterGender, setFilterGender] = useState<"All" | "Male" | "Female">("All");
+  const blocks = blocksInData(billingRecords);
 
   const monthRecords = billingRecords;
   const groups = {
@@ -860,10 +876,11 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
   };
 
   const grandTotal = monthRecords.reduce((s, r) => s + r.current_rent, 0);
-  const maleOcc = monthRecords.filter((r) => r.room_gender === "Male" && r.billing_status !== "Vacant").length;
-  const femaleOcc = monthRecords.filter((r) => r.room_gender === "Female" && r.billing_status !== "Vacant").length;
-  const maleVac = monthRecords.filter((r) => r.room_gender === "Male" && r.billing_status === "Vacant").length;
-  const femaleVac = monthRecords.filter((r) => r.room_gender === "Female" && r.billing_status === "Vacant").length;
+  const occupancy = occupancyReport(monthRecords);
+  const maleOcc = occupancy.maleOccupied;
+  const femaleOcc = occupancy.femaleOccupied;
+  const maleVac = occupancy.maleVacant;
+  const femaleVac = occupancy.femaleVacant;
 
   const pieData = [
     { name: "Occupied Male",   value: maleOcc,   color: "#10B981" },
@@ -944,12 +961,12 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wide">
-                  <tr><th className="text-left px-5 py-2.5 font-semibold">Gender</th><th className="text-center px-4 py-2.5 font-semibold">Occupied</th><th className="text-center px-4 py-2.5 font-semibold">Vacant</th><th className="text-center px-4 py-2.5 font-semibold">Reserved</th><th className="text-center px-4 py-2.5 font-semibold">Total</th></tr>
+                  <tr><th className="text-left px-5 py-2.5 font-semibold">Gender</th><th className="text-center px-4 py-2.5 font-semibold">Occupied</th><th className="text-center px-4 py-2.5 font-semibold">Vacant</th><th className="text-center px-4 py-2.5 font-semibold">Total</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  <tr className="hover:bg-slate-50 transition-colors"><td className="px-5 py-3 font-semibold text-blue-700">Male</td><td className="px-4 py-3 text-center font-bold">{maleOcc}</td><td className="px-4 py-3 text-center text-amber-600 font-medium">{maleVac}</td><td className="px-4 py-3 text-center text-slate-400">0</td><td className="px-4 py-3 text-center font-bold">{maleOcc+maleVac}</td></tr>
-                  <tr className="hover:bg-slate-50 transition-colors"><td className="px-5 py-3 font-semibold text-pink-700">Female</td><td className="px-4 py-3 text-center font-bold">{femaleOcc}</td><td className="px-4 py-3 text-center text-amber-600 font-medium">{femaleVac}</td><td className="px-4 py-3 text-center text-slate-400">0</td><td className="px-4 py-3 text-center font-bold">{femaleOcc+femaleVac}</td></tr>
-                  <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold"><td className="px-5 py-3 text-slate-900">Total</td><td className="px-4 py-3 text-center text-emerald-700">{maleOcc+femaleOcc}</td><td className="px-4 py-3 text-center text-amber-600">{maleVac+femaleVac}</td><td className="px-4 py-3 text-center text-slate-400">0</td><td className="px-4 py-3 text-center text-slate-900">{maleOcc+femaleOcc+maleVac+femaleVac}</td></tr>
+                  <tr className="hover:bg-slate-50 transition-colors"><td className="px-5 py-3 font-semibold text-blue-700">Male</td><td className="px-4 py-3 text-center font-bold">{maleOcc}</td><td className="px-4 py-3 text-center text-amber-600 font-medium">{maleVac}</td><td className="px-4 py-3 text-center font-bold">{maleOcc+maleVac}</td></tr>
+                  <tr className="hover:bg-slate-50 transition-colors"><td className="px-5 py-3 font-semibold text-pink-700">Female</td><td className="px-4 py-3 text-center font-bold">{femaleOcc}</td><td className="px-4 py-3 text-center text-amber-600 font-medium">{femaleVac}</td><td className="px-4 py-3 text-center font-bold">{femaleOcc+femaleVac}</td></tr>
+                  <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold"><td className="px-5 py-3 text-slate-900">Total</td><td className="px-4 py-3 text-center text-emerald-700">{maleOcc+femaleOcc}</td><td className="px-4 py-3 text-center text-amber-600">{maleVac+femaleVac}</td><td className="px-4 py-3 text-center text-slate-900">{maleOcc+femaleOcc+maleVac+femaleVac}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1000,7 +1017,7 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
             </div>
             <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
               <InfoRow label="Active Tenants" value={String(maleOcc + femaleOcc)} />
-              <InfoRow label="Vacant / Reserved" value={String(maleVac + femaleVac)} />
+              <InfoRow label="Vacant" value={String(maleVac + femaleVac)} />
               <InfoRow label="Full Capacity Revenue" value={fmt(grandTotal)} />
             </div>
           </div>
@@ -1012,7 +1029,7 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="sr-only">Tenant Billing Roster</span>
-              <button onClick={() => downloadCSV(`billing-roster-${billingMonth.toLowerCase()}-${getCurrentYear()}.csv`, [["Billing ID","Block","Room","Bed","Gender","Tenant","Phone","Entry","Rent","Month","Balance","Days Due","Status"], ...monthRecords.map(r => [r.billing_id,r.house_block,r.room_number,r.bed_space,r.room_gender,r.tenant_name,r.phone_number,r.entry_date,String(r.current_rent),r.target_month,String(r.total_balance),String(r.days_past_due),r.billing_status])])}
+              <button onClick={() => downloadCSV(`billing-roster-${billingMonth.toLowerCase()}-${getCurrentYear()}.csv`, [["Billing ID","Block","Room","Bed","Gender","Tenant","Phone","Entry","Rent","Month","Balance","Days Due","Status"], ...monthRecords.map(r => [r.billing_id,r.house_block,r.room_number,r.bed_space,r.room_gender,displayOptional(r.tenant_name),displayOptional(r.phone_number),isBillingVacant(r) ? "" : displayOptional(r.entry_date),String(r.current_rent),isBillingVacant(r) ? "" : displayOptional(r.target_month),isBillingVacant(r) ? "" : String(r.total_balance),isBillingVacant(r) ? "" : String(r.days_past_due),r.billing_status])])}
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-150">
                 <Download size={12} /> Export
               </button>
@@ -1023,7 +1040,7 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, ID, phone…" className="pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full min-h-[36px]" />
               </div>
               {[
-                { value: filterBlock, onChange: (v: string) => setFilterBlock(v as BlockCode | "ALL"), options: [["ALL","All Blocks"],["BBH","BBH"],["NWG","NWG"],["ANX","ANX"],["CRV","CRV"]] },
+                { value: filterBlock, onChange: (v: string) => setFilterBlock(v as BlockCode | "ALL"), options: [["ALL","All Blocks"], ...blocks.map((code) => [code, code] as [string, string])] },
                 { value: filterStatus, onChange: (v: string) => setFilterStatus(v as BillingStatus | "ALL"), options: [["ALL","All Statuses"],["Open Window","Open Window"],["Paid / Secured","Paid"],["OVERDUE / UNPAID","Overdue"],["Vacant","Vacant"],["Grace Period","Grace Period"]] },
                 { value: filterGender, onChange: (v: string) => setFilterGender(v as "All" | "Male" | "Female"), options: [["All","All Genders"],["Male","Male"],["Female","Female"]] },
               ].map((sel, i) => (
@@ -1059,12 +1076,12 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
                 return (
                   <tr key={r.billing_id} className="hover:bg-slate-50 transition-colors duration-150 group">
                     <td className="px-4 py-3 font-mono text-xs font-bold text-slate-600 group-hover:text-slate-800">{r.billing_id}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-900 max-w-[160px]"><span className="truncate block">{r.tenant_name}</span></td>
+                    <td className="px-4 py-3 font-semibold text-slate-900 max-w-[160px]"><span className="truncate block">{displayOptional(r.tenant_name)}</span></td>
                     <td className="px-3 py-3"><span className={`text-xs font-semibold ${r.room_gender === "Male" ? "text-blue-600" : "text-pink-600"}`}>{r.room_gender}</span></td>
-                    <td className="px-3 py-3 font-mono text-xs text-slate-500">{r.phone_number === "-" ? "—" : r.phone_number}</td>
+                    <td className="px-3 py-3 font-mono text-xs text-slate-500">{displayOptional(r.phone_number)}</td>
                     <td className="px-3 py-3 text-right font-mono text-xs font-semibold text-slate-700">{fmt(r.current_rent)}</td>
-                    <td className="px-3 py-3 text-xs font-medium text-slate-600">{r.target_month === "-" ? "—" : r.target_month}</td>
-                    <td className={`px-3 py-3 text-right font-mono text-xs font-bold ${r.total_balance === 0 ? "text-emerald-600" : r.billing_status === "OVERDUE / UNPAID" ? "text-red-600" : "text-slate-900"}`}>{r.billing_status === "Vacant" ? "—" : fmt(r.total_balance)}</td>
+                    <td className="px-3 py-3 text-xs font-medium text-slate-600">{isBillingVacant(r) ? "" : displayOptional(r.target_month)}</td>
+                    <td className={`px-3 py-3 text-right font-mono text-xs font-bold ${r.total_balance === 0 ? "text-emerald-600" : r.billing_status === "OVERDUE / UNPAID" ? "text-red-600" : "text-slate-900"}`}>{isBillingVacant(r) ? "" : fmt(r.total_balance)}</td>
                     <td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${s.badge}`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot} shrink-0`}/>{r.billing_status === "OVERDUE / UNPAID" ? "Overdue" : r.billing_status}</span></td>
                   </tr>
                 );
@@ -1082,7 +1099,7 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
               <div key={r.billing_id} className="px-4 py-4 flex items-start justify-between gap-3 hover:bg-slate-50 transition-colors">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-1"><span className="font-mono text-[10px] font-bold text-slate-500">{r.billing_id}</span><span className={`text-[10px] font-semibold ${r.room_gender === "Male" ? "text-blue-600" : "text-pink-600"}`}>{r.room_gender}</span></div>
-                  <p className="font-bold text-slate-900 text-sm leading-tight">{r.tenant_name}</p>
+                  <p className="font-bold text-slate-900 text-sm leading-tight">{displayOptional(r.tenant_name)}</p>
                   <p className="text-xs text-slate-500 mt-0.5 font-mono">{fmt(r.current_rent)}/mo</p>
                 </div>
                 <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
@@ -1100,9 +1117,10 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
 
 // ─── Portal View ─────────────────────────────────────────────────────────────
 
-function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, vacateBed }: {
+function PortalView({ beds, billingMap, payments, billingMonth, onboard, updateStudent, vacateBed }: {
   beds: BedSpace[];
   billingMap: Map<string, BillingRecord>;
+  payments: Payment[];
   billingMonth: BillingMonth;
   onboard: (input: OnboardStudentInput) => Promise<unknown>;
   updateStudent: (input: { tenantId: string; name: string; phone: string; email: string; moveInDate: string; gender?: RoomGender }) => Promise<unknown>;
@@ -1119,6 +1137,14 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [vacating, setVacating] = useState(false);
+  const lastPayByBed = useMemo(() => {
+    const map = new Map<string, Payment>();
+    for (const bed of beds) {
+      const last = lastVerifiedPayment(payments, bed.id, bed.student?.name);
+      if (last) map.set(bed.id, last);
+    }
+    return map;
+  }, [beds, payments]);
 
   function closeDrawer() {
     setDrawerBed(null);
@@ -1173,6 +1199,7 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
   const assignableBeds = form.gender
     ? vacantBedsForGender(vacantBeds, form.gender)
     : vacantBeds;
+  const blocks = blocksInData(beds);
   const filteredBeds = selectedBlock === "ALL" ? beds : beds.filter((b) => b.blockCode === selectedBlock);
 
   async function handleOnboard() {
@@ -1197,7 +1224,7 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Total Beds" value={beds.length} sub="across 4 blocks" icon={Building2} />
+        <KpiCard label="Total Beds" value={beds.length} sub={`across ${blocks.length} blocks`} icon={Building2} />
         <KpiCard label="Occupied" value={occupied} accent="text-emerald-600" sub={`${Math.round(occupied / beds.length * 100)}% occupancy`} icon={Users} />
         <KpiCard label="Vacant" value={vacant} accent="text-amber-600" sub="available" icon={Home} />
         <KpiCard label="Expected Revenue" value={fmt(expectedRevenue)} accent="text-blue-700" sub={`Full capacity ${fmt(fullCapacity)}`} icon={DollarSign} />
@@ -1206,7 +1233,7 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <p className="order-first sm:order-none text-sm font-semibold text-slate-700">{formatMonthYear(billingMonth)}</p>
         <div className="flex gap-2 flex-wrap">
-          {(["ALL", ...BLOCKS] as (BlockCode | "ALL")[]).map((b) => (
+          {(["ALL", ...blocks] as (BlockCode | "ALL")[]).map((b) => (
             <button key={b} onClick={() => setSelectedBlock(b)}
               className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-150 min-h-[36px] ${selectedBlock === b ? "bg-slate-900 text-white shadow-sm" : "bg-white text-slate-600 border border-slate-200 hover:border-slate-400 hover:bg-slate-50"}`}>
               {b}
@@ -1227,7 +1254,7 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
         ))}
       </div>
 
-      {BLOCKS.map((code) => {
+      {blocks.map((code) => {
         const blockBeds = filteredBeds.filter((b) => b.blockCode === code);
         if (blockBeds.length === 0) return null;
         const bOccupied = blockBeds.filter((b) => b.status === "occupied").length;
@@ -1245,7 +1272,7 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
             </div>
             <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2.5">
               {blockBeds.map((bed) => (
-                <BedCard key={bed.id} bed={bed} billingRecord={billingMap.get(bed.id)} onClick={() => setDrawerBed(bed)} />
+                <BedCard key={bed.id} bed={bed} billingRecord={billingMap.get(bed.id)} lastPayment={lastPayByBed.get(bed.id)} onClick={() => setDrawerBed(bed)} />
               ))}
             </div>
           </div>
@@ -1255,6 +1282,7 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
       {drawerBed && (() => {
         const br = billingMap.get(drawerBed.id);
         const s = billingStatusStyle[br?.billing_status ?? "Vacant"];
+        const lastPay = lastPayByBed.get(drawerBed.id);
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeDrawer} />
@@ -1262,7 +1290,7 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
               <div className="bg-slate-900 px-6 py-5 flex items-start justify-between shrink-0">
                 <div>
                   <span className="text-xs font-mono text-emerald-400 uppercase tracking-wider">{drawerBed.identifier}</span>
-                  <p className="text-white font-bold text-lg mt-1">{drawerBed.student?.name ?? "Vacant Bed Space"}</p>
+                  <p className="text-white font-bold text-lg mt-1">{displayOptional(drawerBed.student?.name)}</p>
                   {br && <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold mt-2 ${s.badge}`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot}`}/>{br.billing_status === "OVERDUE / UNPAID" ? "Overdue" : br.billing_status}</span>}
                 </div>
                 <button onClick={closeDrawer} className="text-slate-400 hover:text-white transition-colors p-1 ml-4"><X size={20} /></button>
@@ -1336,11 +1364,11 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
                       </div>
                     ) : (
                       <div className="bg-slate-50 rounded-xl p-4 space-y-2.5">
-                        <InfoRow label="Full Name" value={drawerBed.student.name} icon={User} />
-                        <InfoRow label="Phone" value={drawerBed.student.phone} icon={Phone} />
-                        <InfoRow label="Email" value={drawerBed.student.email} icon={Mail} />
-                        <InfoRow label="Gender" value={drawerBed.student.gender ?? drawerBed.roomGender ?? "—"} />
-                        <InfoRow label="Move-in Date" value={drawerBed.student.moveInDate} icon={Calendar} />
+                        <InfoRow label="Full Name" value={displayOptional(drawerBed.student.name)} icon={User} />
+                        <InfoRow label="Phone" value={displayOptional(drawerBed.student.phone)} icon={Phone} />
+                        <InfoRow label="Email" value={displayOptional(drawerBed.student.email)} icon={Mail} />
+                        <InfoRow label="Gender" value={drawerBed.student.gender ?? drawerBed.roomGender ?? ""} />
+                        <InfoRow label="Move-in Date" value={displayOptional(drawerBed.student.moveInDate)} icon={Calendar} />
                       </div>
                     )}
                     <div>
@@ -1357,8 +1385,14 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Billing</h3>
                         <div className={`rounded-xl p-4 space-y-2.5 border ${s.border} ${s.bg}`}>
                           <InfoRow label="Balance" value={fmt(br.total_balance)} />
-                          <InfoRow label="Target Month" value={br.target_month} />
+                          <InfoRow label="Target Month" value={displayOptional(br.target_month)} />
                           <InfoRow label="Days Past Due" value={br.days_past_due > 0 ? `${br.days_past_due} days` : "On time"} />
+                          {lastPay && (
+                            <InfoRow
+                              label="Last Payment"
+                              value={`${fmt(lastPay.amount)} · ${lastPay.submittedAt} · ${lastPay.method}`}
+                            />
+                          )}
                         </div>
                       </div>
                     )}
@@ -1366,7 +1400,7 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
                 ) : (
                   <div className="text-center py-10 text-slate-400">
                     <Home size={36} className="mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">This bed space is currently unoccupied{drawerBed.roomGender ? ` (${drawerBed.roomGender})` : ""}.</p>
+                    <p className="text-sm">This bed space is currently unoccupied.</p>
                     <button onClick={() => { setDrawerBed(null); setShowOnboard(true); setForm((f) => ({ ...f, bedId: drawerBed.id, gender: drawerBed.roomGender ?? f.gender })); }}
                       className="mt-4 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors">
                       Assign Tenant
@@ -1444,7 +1478,7 @@ function PortalView({ beds, billingMap, billingMonth, onboard, updateStudent, va
 
 // ─── Pay View ────────────────────────────────────────────────────────────────
 
-function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updatePay }: {
+function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updatePay, initialFilter = "all" }: {
   payments: Payment[];
   beds: BedSpace[];
   billingRecords: BillingRecord[];
@@ -1459,8 +1493,9 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
     transactionRef: string;
     submittedAt: string;
   }) => Promise<unknown>;
+  initialFilter?: PayStatus | "all";
 }) {
-  const [filter, setFilter] = useState<PayStatus | "all">("pending");
+  const [filter, setFilter] = useState<PayStatus | "all">(initialFilter);
   const [rejectModal, setRejectModal] = useState<{ id: string } | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [viewReceipt, setViewReceipt] = useState<Payment | null>(null);
@@ -1472,8 +1507,10 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
   const filtered = payments.filter((p) => filter === "all" || p.status === filter);
   const pendingCount = payments.filter((p) => p.status === "pending").length;
   const verifiedCount = payments.filter((p) => p.status === "verified").length;
-  const totalVerified = payments.filter((p) => p.status === "verified").reduce((s, p) => s + p.amount, 0);
-  const totalExpected = beds.filter((b) => b.status === "occupied").reduce((s, b) => s + b.rentAmount, 0);
+  const occupiedBilling = billingRecords.filter((r) => r.billing_status !== "Vacant" && !isVacantName(r.tenant_name));
+  const totalExpected = occupiedBilling.reduce((s, r) => s + r.current_rent, 0);
+  const collectedCycle = occupiedBilling.filter((r) => r.total_balance === 0).reduce((s, r) => s + r.current_rent, 0);
+  const collectionRate = totalExpected > 0 ? Math.round((collectedCycle / totalExpected) * 100) : 0;
 
   async function verify(id: string) { await verifyPay(id); }
   async function reject() {
@@ -1517,21 +1554,20 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
     }
   }
 
-  const blockProgress = BLOCKS.map((code) => {
-    const blockBeds = beds.filter((b) => b.blockCode === code && b.status === "occupied");
-    const expected = blockBeds.reduce((s, b) => s + b.rentAmount, 0);
-    const names = blockBeds.map((b) => b.student?.name).filter(Boolean);
-    const verified = payments.filter((p) => p.status === "verified" && names.includes(p.studentName)).reduce((s, p) => s + p.amount, 0);
-    return { code, expected, verified, pct: expected > 0 ? Math.min((verified / expected) * 100, 100) : 0 };
+  const blockProgress = blocksInData(beds).map((code) => {
+    const blockRecords = occupiedBilling.filter((r) => r.house_block === code);
+    const expected = blockRecords.reduce((s, r) => s + r.current_rent, 0);
+    const collected = blockRecords.filter((r) => r.total_balance === 0).reduce((s, r) => s + r.current_rent, 0);
+    return { code, expected, verified: collected, pct: expected > 0 ? Math.min((collected / expected) * 100, 100) : 0 };
   });
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Expected Revenue" value={fmt(totalExpected)} sub="all occupied beds" icon={DollarSign} />
-        <KpiCard label="Verified" value={fmt(totalVerified)} accent="text-emerald-700" sub={`${verifiedCount} payments`} icon={CheckCircle} />
+        <KpiCard label="Expected Revenue" value={fmt(totalExpected)} sub="occupied beds this cycle" icon={DollarSign} />
+        <KpiCard label="Collected" value={fmt(collectedCycle)} accent="text-emerald-700" sub={`${verifiedCount} spreadsheet receipts`} icon={CheckCircle} />
         <KpiCard label="Pending Review" value={pendingCount} accent="text-amber-600" sub="awaiting verification" icon={RefreshCw} />
-        <KpiCard label="Collection Rate" value={`${Math.round((totalVerified / totalExpected) * 100)}%`} accent="text-blue-700" icon={BarChart3} />
+        <KpiCard label="Collection Rate" value={`${collectionRate}%`} accent="text-blue-700" sub="paid beds vs expected" icon={BarChart3} />
       </div>
 
       <SpreadsheetPaymentBoard billingRecords={billingRecords} />
@@ -1690,7 +1726,8 @@ function UtilitiesView({ utilities, beds, saveUtility, toggleSettled }: {
   saveUtility: (blockCode: BlockCode, month: string, totalCost: number) => Promise<unknown>;
   toggleSettled: (blockCode: BlockCode, month: string, name: string) => Promise<void>;
 }) {
-  const [form, setForm] = useState({ blockCode: "BBH" as BlockCode, totalCost: "", month: formatMonthYear(getCurrentBillingMonth()) });
+  const blocks = blocksInData(beds);
+  const [form, setForm] = useState({ blockCode: (blocks[0] ?? "BBH") as BlockCode, totalCost: "", month: formatMonthYear(getCurrentBillingMonth()) });
   const [submitted, setSubmitted] = useState(false);
 
   function calcEntry() {
@@ -1724,7 +1761,7 @@ function UtilitiesView({ utilities, beds, saveUtility, toggleSettled }: {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Block</label>
               <select value={form.blockCode} onChange={(e) => setForm((f) => ({ ...f, blockCode: e.target.value as BlockCode }))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px]">
-                {BLOCKS.map((b) => <option key={b}>{b}</option>)}
+                {blocks.map((b) => <option key={b}>{b}</option>)}
               </select>
             </div>
             <Field label="Billing Month" value={form.month} onChange={(v) => setForm((f) => ({ ...f, month: v }))} />
@@ -1818,8 +1855,8 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
   const student = myBed?.student ?? {
     id: currentUser?.id ?? "guest-student",
     name: currentUser?.name ?? "Student",
-    phone: currentUser?.phone ?? "-",
-    nrc: currentUser?.nrc ?? "-",
+    phone: displayOptional(currentUser?.phone),
+    nrc: displayOptional(currentUser?.nrc),
     email: currentUser?.email ?? "",
     moveInDate: currentUser?.moveInDate ?? new Date().toISOString().slice(0, 10),
   };
@@ -2182,7 +2219,7 @@ const BOTTOM_NAV: { id: LandlordView; label: string; icon: React.ElementType }[]
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudent, updateStudentAccount, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, updatePay, saveUtility, toggleSettled, updateIssueStatus }: {
+function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudent, updateStudentAccount, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, updatePay, saveUtility, toggleSettled, updateIssueStatus, refreshData }: {
   beds: BedSpace[];
   billingRecords: BillingRecord[];
   billingMap: Map<string, BillingRecord>;
@@ -2214,10 +2251,12 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   saveUtility: (blockCode: BlockCode, month: string, totalCost: number) => Promise<unknown>;
   toggleSettled: (blockCode: BlockCode, month: string, name: string) => Promise<void>;
   updateIssueStatus: (id: string, status: IssueStatus, resolutionNote?: string) => Promise<void>;
+  refreshData: () => Promise<unknown>;
 }) {
   const now = useLiveDateTime();
-  const [view, setView] = useState<LandlordView>("revenue");
+  const [view, setView] = useState<LandlordView>("portal");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [inboxRoute, setInboxRoute] = useState<{ kind: LandlordNotificationKind; at: number } | null>(null);
   const billingMonth = BILLING_MONTHS[now.getMonth()];
   const monthBillingRecords = billingRecords;
   const monthBillingMap = billingMap;
@@ -2227,6 +2266,23 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   const overdueCount = monthBillingRecords.filter((r) => r.billing_status === "OVERDUE / UNPAID").length;
 
   const canManage = isLandlord(landlord);
+  const inbox = useLandlordInbox({
+    enabled: canManage,
+    billingRecords: monthBillingRecords,
+    payments,
+    issues,
+  });
+
+  async function openInboxItem(item: LandlordNotification) {
+    await inbox.open(item.id);
+  }
+
+  function goToInboxItem(item: LandlordNotification) {
+    setInboxRoute({ kind: item.kind, at: Date.now() });
+    setView(landlordNotificationView(item));
+    setSidebarOpen(false);
+    void refreshData();
+  }
 
   const viewTitles: Record<LandlordView, string> = {
     portal: "Occupancy Portal", revenue: "Revenue Tracker", pay: "Payments & Verification",
@@ -2282,8 +2338,24 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
           <h1 className="text-base font-bold text-slate-900 flex-1">{viewTitles[view]}</h1>
           <div className="flex items-center gap-2">
             <span className="hidden sm:inline text-xs font-mono bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg">{formatHeaderDateTime(now)}</span>
-            {overdueCount > 0 && <span className="flex items-center gap-1 bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-xs font-semibold"><AlertTriangle size={12} />{overdueCount} overdue</span>}
-            {pendingPay > 0 && <span className="hidden sm:flex items-center gap-1 bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full text-xs font-semibold"><AlertTriangle size={12} />{pendingPay} pending</span>}
+            <LandlordNotificationBell
+              items={inbox.items}
+              loading={inbox.loading}
+              unread={inbox.unread}
+              billingRecords={monthBillingRecords}
+              beds={beds}
+              students={students}
+              payments={payments}
+              issues={issues}
+              onMarkRead={(item) => { void openInboxItem(item); }}
+              onMarkAllRead={() => { void inbox.markAllRead(); }}
+              onPanelOpen={() => { void inbox.refresh(); }}
+              onGoTo={goToInboxItem}
+              verifyPay={verifyPay}
+              rejectPay={rejectPay}
+              updateIssueStatus={updateIssueStatus}
+              onAfterAction={() => { void refreshData(); void inbox.refresh(); }}
+            />
           </div>
         </header>
 
@@ -2293,12 +2365,36 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
               Could not refresh tracker data from the server. {dataError}
             </StatusBanner>
           )}
-          {view === "portal"    && <PortalView beds={beds} billingMap={monthBillingMap} billingMonth={billingMonth} onboard={onboard} updateStudent={updateStudent} vacateBed={vacateBed} />}
+          {view === "portal"    && <PortalView beds={beds} billingMap={monthBillingMap} payments={payments} billingMonth={billingMonth} onboard={onboard} updateStudent={updateStudent} vacateBed={vacateBed} />}
           {view === "revenue"   && <RevenueView billingRecords={monthBillingRecords} billingMonth={billingMonth} />}
-          {view === "pay"       && <PayView payments={payments} beds={beds} billingRecords={monthBillingRecords} verifyPay={verifyPay} rejectPay={rejectPay} updatePay={updatePay} />}
+          {view === "pay"       && (
+            <PayView
+              key={`pay-${inboxRoute?.kind ?? "default"}-${inboxRoute?.at ?? 0}`}
+              payments={payments}
+              beds={beds}
+              billingRecords={monthBillingRecords}
+              verifyPay={verifyPay}
+              rejectPay={rejectPay}
+              updatePay={updatePay}
+              initialFilter={inboxRoute?.kind === "payment_submitted" ? "pending" : inboxRoute?.kind === "payment_verified" ? "verified" : "all"}
+            />
+          )}
           {view === "utilities" && <UtilitiesView utilities={utilities} beds={beds} saveUtility={saveUtility} toggleSettled={toggleSettled} />}
           {view === "students"  && <StudentsView students={students} beds={beds} canManage={canManage} onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }} updateStudentAccount={updateStudentAccount} evictStudent={evictStudent} applyRentIncrement={applyRentIncrement} />}
-          {view === "reports"   && <ReportsView issues={issues} payments={payments} beds={beds} billingRecords={monthBillingRecords} utilities={utilities} canExport={canManage} updateIssueStatus={updateIssueStatus} />}
+          {view === "reports"   && (
+            <ReportsView
+              key={`reports-${inboxRoute?.kind ?? "default"}-${inboxRoute?.at ?? 0}`}
+              issues={issues}
+              payments={payments}
+              beds={beds}
+              billingRecords={monthBillingRecords}
+              utilities={utilities}
+              canExport={canManage}
+              updateIssueStatus={updateIssueStatus}
+              initialSubView={inboxRoute?.kind === "maintenance_submitted" ? "maintenance" : "hub"}
+              onRefresh={refreshData}
+            />
+          )}
           {view === "profile"   && <LandlordProfile beds={beds} billingRecords={monthBillingRecords} landlord={landlord} onSave={onLandlordProfileSave} />}
           {view === "settings"  && <LandlordSettings landlord={landlord} onProfileSave={onLandlordProfileSave} />}
         </main>
@@ -2618,6 +2714,7 @@ function AppRoutes() {
       students={tracker.students}
       landlord={currentUser}
       dataError={tracker.error}
+      refreshData={tracker.refresh}
       evictStudent={async (input) => {
         assertLandlord(currentUser, "remove a student");
         return tracker.evictStudent({ ...input, actor: currentUser?.email ?? null });

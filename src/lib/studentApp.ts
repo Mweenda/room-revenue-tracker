@@ -48,7 +48,7 @@ export function studentManifestFromUnknown(value: unknown): StudentAppManifest |
   };
 }
 
-type ShellStorage = Pick<Storage, "getItem" | "setItem"> | null;
+type ShellStorage = Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
 
 function defaultShellStorage(): ShellStorage {
   if (typeof window === "undefined") return null;
@@ -90,6 +90,15 @@ export function rememberStudentShell(storage: Pick<Storage, "setItem"> | null = 
   }
 }
 
+export function forgetStudentShell(storage: Pick<Storage, "removeItem"> | null = defaultShellStorage()): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(STUDENT_SHELL_STORAGE_KEY);
+  } catch {
+    // Private mode / WebView storage can throw.
+  }
+}
+
 export type StudentShellDetectInput = {
   search?: string;
   pathname?: string;
@@ -109,14 +118,20 @@ export function detectStudentNativeShell(input: StudentShellDetectInput = {}): b
       : Boolean((window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()));
   const storage = input.storage === undefined ? defaultShellStorage() : input.storage;
 
-  const live =
-    capacitorNative ||
-    studentPortalLaunchParam(search) ||
-    isStudentPortalPath(pathname) ||
-    isStudentShellUserAgent(userAgent);
-  const detected = live || studentShellRemembered(storage);
-  if (live) rememberStudentShell(storage);
-  return detected;
+  const native = capacitorNative || isStudentShellUserAgent(userAgent);
+  const onStudentRoute = studentPortalLaunchParam(search) || isStudentPortalPath(pathname);
+
+  // APK / native UA: stay on the student portal even if replaceState drops /student.
+  if (native) {
+    rememberStudentShell(storage);
+    return true;
+  }
+
+  // Browser: /student is the student portal for this URL only. Do not pin the
+  // whole tab, or the landlord cannot open the landing page again.
+  if (onStudentRoute) return true;
+  forgetStudentShell(storage);
+  return false;
 }
 
 export function isStudentNativeShell(): boolean {

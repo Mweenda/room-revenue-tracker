@@ -1,3 +1,4 @@
+import { dbFn } from "../../server/dbFn";
 import { getSupabase } from "../supabase";
 import type { BillingRecord } from "../types";
 import { mapBilling } from "./mappers";
@@ -9,13 +10,13 @@ export async function fetchBillingRecords(): Promise<BillingRecord[]> {
   if (!sb) throw new Error("Supabase not configured");
 
   try {
-    await sb.rpc("roll_billing_cycle");
+    await dbFn(sb, "roll_billing_cycle");
   } catch {
     // RPC ships with migration 018; the client still rolls the fetched snapshot.
   }
 
   try {
-    await sb.rpc("sync_billing_due_dates");
+    await dbFn(sb, "sync_billing_due_dates");
   } catch {
     // RPC ships with migration 017; client refresh still labels overdue correctly.
   }

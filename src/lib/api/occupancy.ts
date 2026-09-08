@@ -1,10 +1,11 @@
+import { dbFn } from "../../server/dbFn";
 import { getSupabase } from "../supabase";
 
 export async function reconcileBedSpace(bedId: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
-  const { error } = await sb.rpc("reconcile_bed_space", { p_bed_id: bedId });
+  const { error } = await dbFn(sb, "reconcile_bed_space", { p_bed_id: bedId });
   if (error) throw error;
 }
 
@@ -12,7 +13,7 @@ export async function reconcileAllOccupancy(): Promise<number> {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
-  const { data, error } = await sb.rpc("reconcile_all_occupancy");
+  const { data, error } = await dbFn(sb, "reconcile_all_occupancy");
   if (error) throw error;
   return Number(data ?? 0);
 }

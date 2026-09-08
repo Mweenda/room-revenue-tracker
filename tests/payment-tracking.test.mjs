@@ -141,7 +141,36 @@ test("vacant beds stay at a zero balance", () => {
     new Date("2026-09-07T08:00:00Z"),
   );
   assert.equal(rolled.total_balance, 0);
-  assert.equal(rolled.target_month, "-");
+  assert.equal(rolled.target_month, "");
+  assert.equal(rolled.tenant_name, "");
+  assert.equal(rolled.phone_number, "");
+  assert.equal(rolled.entry_date, "");
+  assert.equal(rolled.billing_status, "Vacant");
+});
+
+test("blank tenant names are treated as vacant and stay empty", () => {
+  const rolled = rollBillingRecord(
+    {
+      billing_id: "UPV-10-A",
+      house_block: "UPV",
+      room_number: "10",
+      bed_space: "A",
+      room_gender: "Male",
+      tenant_name: "",
+      phone_number: "",
+      entry_date: "",
+      current_rent: 900,
+      target_month: "",
+      accumulated_total: 0,
+      total_balance: 0,
+      days_past_due: 0,
+      billing_status: "Vacant",
+    },
+    "Sep",
+    new Date("2026-09-07T08:00:00Z"),
+  );
+  assert.equal(rolled.tenant_name, "");
+  assert.equal(rolled.target_month, "");
   assert.equal(rolled.billing_status, "Vacant");
 });
 
@@ -167,13 +196,18 @@ test("a verified payment clears the oldest unpaid month first", () => {
   assert.equal(settled.targetMonth, "Sep");
 });
 
-test("seed roster still has 54 beds and occupied rent equals expected revenue", () => {
+test("occupancy report totals include occupied and vacant beds by gender", () => {
   const report = occupancyReport(BILLING_RECORDS);
   assert.equal(report.totalBeds, 54);
   assert.equal(report.activeTenants, 48);
   assert.equal(report.vacantBeds, 6);
+  assert.equal(report.maleOccupied + report.maleVacant, report.maleBeds);
+  assert.equal(report.femaleOccupied + report.femaleVacant, report.femaleBeds);
+  assert.equal(report.maleBeds + report.femaleBeds, report.totalBeds);
+  assert.equal(report.activeTenants + report.vacantBeds, report.totalBeds);
+  assert.ok(report.maleBeds > report.maleVacant);
+  assert.ok(report.femaleBeds > report.femaleVacant);
   assert.equal(report.expectedRevenue + vacantBedRows(BILLING_RECORDS).reduce((sum, row) => sum + row.rent, 0), report.fullCapacityRevenue);
-  assert.equal(vacantBedRows(BILLING_RECORDS).length, 6);
 });
 
 test("payment windows split occupied students by entry day", () => {

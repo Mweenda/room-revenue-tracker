@@ -1,6 +1,6 @@
 import type { StudentAccountRow } from "./api/students";
 import type { BedSpace, BillingRecord, ManualPaymentInput, Payment, TenantStatus, UpdateStudentAccountInput } from "./types";
-import { assertUniqueActivePhone, bedHasTenant } from "./occupancy";
+import { assertUniqueActivePhone, bedHasTenant, vacantBillingPatch } from "./occupancy";
 import { lastVerifiedPayment } from "./paymentsEdit";
 import { applyPaymentToLedger } from "./paymentTracking";
 import { rentDueDateIso } from "./rentDue";
@@ -115,8 +115,8 @@ export function applyStudentAccountUpdate(
   const student = {
     ...currentBed.student,
     name,
-    phone: input.phone.trim() || "-",
-    email: input.email.trim() || "-",
+    phone: input.phone.trim(),
+    email: input.email.trim(),
     nrc: input.nrc?.trim() || currentBed.student.nrc,
     moveInDate: input.moveInDate || currentBed.student.moveInDate,
     gender,
@@ -138,14 +138,7 @@ export function applyStudentAccountUpdate(
     if (currentBed.id !== targetBed.id && record.billing_id === currentBed.id) {
       return {
         ...record,
-        tenant_name: "Vacant",
-        phone_number: "-",
-        entry_date: "-",
-        total_balance: 0,
-        accumulated_total: 0,
-        days_past_due: 0,
-        target_month: "-",
-        billing_status: "Vacant" as const,
+        ...vacantBillingPatch(),
       };
     }
     if (record.billing_id === targetBed.id) {

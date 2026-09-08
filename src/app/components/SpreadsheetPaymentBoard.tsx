@@ -3,7 +3,7 @@ import { paymentWindowGroups, vacantBedRows, occupancyReport } from "../../lib/p
 import type { BillingRecord } from "../../lib/types";
 
 function formatEntryDate(value: string): string {
-  if (!value || value === "-") return "-";
+  if (!value || value === "-") return "";
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   if (!match) return value;
   return `${Number(match[2])}/${Number(match[3])}/${match[1]}`;
@@ -64,29 +64,29 @@ export default function SpreadsheetPaymentBoard({ billingRecords }: { billingRec
               <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wide">
                 <tr>
                   <th className="text-left px-5 py-2.5 font-semibold">Gender</th>
+                  <th className="text-center px-3 py-2.5 font-semibold">Occupied</th>
                   <th className="text-center px-3 py-2.5 font-semibold">Vacant</th>
-                  <th className="text-center px-3 py-2.5 font-semibold">Reserved</th>
                   <th className="text-center px-5 py-2.5 font-semibold">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 <tr>
                   <td className="px-5 py-2.5 font-semibold text-blue-700">Male</td>
-                  <td className="px-3 py-2.5 text-center font-bold">{occupancy.maleVacant}</td>
-                  <td className="px-3 py-2.5 text-center text-slate-400">0</td>
-                  <td className="px-5 py-2.5 text-center font-bold">{occupancy.maleVacant}</td>
+                  <td className="px-3 py-2.5 text-center font-bold text-emerald-700">{occupancy.maleOccupied}</td>
+                  <td className="px-3 py-2.5 text-center font-bold text-amber-700">{occupancy.maleVacant}</td>
+                  <td className="px-5 py-2.5 text-center font-bold">{occupancy.maleBeds}</td>
                 </tr>
                 <tr>
                   <td className="px-5 py-2.5 font-semibold text-pink-700">Female</td>
-                  <td className="px-3 py-2.5 text-center font-bold">{occupancy.femaleVacant}</td>
-                  <td className="px-3 py-2.5 text-center text-slate-400">0</td>
-                  <td className="px-5 py-2.5 text-center font-bold">{occupancy.femaleVacant}</td>
+                  <td className="px-3 py-2.5 text-center font-bold text-emerald-700">{occupancy.femaleOccupied}</td>
+                  <td className="px-3 py-2.5 text-center font-bold text-amber-700">{occupancy.femaleVacant}</td>
+                  <td className="px-5 py-2.5 text-center font-bold">{occupancy.femaleBeds}</td>
                 </tr>
                 <tr className="bg-slate-50 font-bold">
                   <td className="px-5 py-2.5">Total</td>
-                  <td className="px-3 py-2.5 text-center">{occupancy.vacantBeds}</td>
-                  <td className="px-3 py-2.5 text-center text-slate-400">0</td>
-                  <td className="px-5 py-2.5 text-center">{occupancy.vacantBeds}</td>
+                  <td className="px-3 py-2.5 text-center text-emerald-700">{occupancy.activeTenants}</td>
+                  <td className="px-3 py-2.5 text-center text-amber-700">{occupancy.vacantBeds}</td>
+                  <td className="px-5 py-2.5 text-center">{occupancy.totalBeds}</td>
                 </tr>
               </tbody>
             </table>
@@ -95,7 +95,7 @@ export default function SpreadsheetPaymentBoard({ billingRecords }: { billingRec
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-2">
             <h3 className="text-sm font-bold text-slate-900 mb-3">Bed Space Report</h3>
             <MetricRow label="Active Tenants" value={String(occupancy.activeTenants)} />
-            <MetricRow label="Vacant / Reserved" value={String(occupancy.vacantBeds)} />
+            <MetricRow label="Vacant" value={String(occupancy.vacantBeds)} />
             <MetricRow label="Total Bed Spaces" value={String(occupancy.totalBeds)} />
             <MetricRow label="Expected Revenue" value={fmtKwacha(occupancy.expectedRevenue)} emphasize />
             <MetricRow label="Full Capacity Revenue" value={fmtKwacha(occupancy.fullCapacityRevenue)} emphasize />

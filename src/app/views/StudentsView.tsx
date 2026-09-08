@@ -41,7 +41,8 @@ import {
 import RentIncrementDialog, { type ApplyRentIncrementResult } from "../components/RentIncrementDialog";
 import StudentAccountDialog from "../components/StudentAccountDialog";
 import WhatsAppGateway from "../components/WhatsAppGateway";
-import { BLOCKS, fmtKwacha } from "../../lib/billing";
+import { blocksInData, fmtKwacha } from "../../lib/billing";
+import { displayOptional } from "../../lib/occupancy";
 import { bedLabel, matchesStudentSearch, TENANT_STATUS_LABEL } from "../../lib/students";
 import { composeRentReminder, whatsappChatUrl } from "../../lib/whatsapp";
 import type { StudentAccountRow } from "../../lib/api/students";
@@ -103,6 +104,7 @@ export default function StudentsView({
 }) {
   const [search, setSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState<BlockCode | "all">("all");
+  const blocks = useMemo(() => blocksInData(beds), [beds]);
   const [billingFilter, setBillingFilter] = useState<BillingStatus | "all">("all");
   const [statusFilter, setStatusFilter] = useState<TenantStatus | "all">("active");
   const [genderFilter, setGenderFilter] = useState<RoomGender | "all">("all");
@@ -265,7 +267,7 @@ export default function StudentsView({
               aria-label="Filter by block"
             >
               <option value="all">All blocks</option>
-              {BLOCKS.map((block) => <option key={block} value={block}>{block}</option>)}
+              {blocks.map((block) => <option key={block} value={block}>{block}</option>)}
             </select>
 
             <select
@@ -359,20 +361,20 @@ export default function StudentsView({
                       )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      <p className="text-xs text-slate-600 truncate max-w-[14rem]">{row.email ?? "-"}</p>
-                      <p className="text-xs text-slate-400">{row.phone ?? "-"}</p>
+                      <p className="text-xs text-slate-600 truncate max-w-[14rem]">{displayOptional(row.email)}</p>
+                      <p className="text-xs text-slate-400">{displayOptional(row.phone)}</p>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-slate-500">{bedLabel(row)}</TableCell>
                     <TableCell className="hidden lg:table-cell text-xs font-semibold">
                       <span className={row.gender === "Female" || row.room_gender === "Female" ? "text-pink-600" : "text-blue-600"}>
-                        {row.gender ?? row.room_gender ?? "-"}
+                        {row.gender ?? row.room_gender ?? ""}
                       </span>
                     </TableCell>
                     <TableCell className="text-right hidden sm:table-cell">
-                      {row.rent_amount != null ? fmtKwacha(row.rent_amount) : "-"}
+                      {row.rent_amount != null ? fmtKwacha(row.rent_amount) : ""}
                     </TableCell>
                     <TableCell className={`text-right font-semibold ${(row.total_balance ?? 0) > 0 ? "text-red-600" : "text-slate-500"}`}>
-                      {row.total_balance != null ? fmtKwacha(row.total_balance) : "-"}
+                      {row.total_balance != null ? fmtKwacha(row.total_balance) : ""}
                     </TableCell>
                     <TableCell className={`text-right hidden md:table-cell font-semibold ${(row.days_past_due ?? 0) > 5 ? "text-red-600" : (row.days_past_due ?? 0) > 0 ? "text-amber-600" : "text-slate-500"}`}>
                       {row.days_past_due ?? 0}
@@ -512,13 +514,13 @@ export default function StudentsView({
 
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  ["NRC", detail.nrc ?? "-"],
-                  ["Gender", detail.gender ?? detail.room_gender ?? "-"],
-                  ["Move-in", detail.move_in_date ?? "-"],
-                  ["Monthly rent", detail.rent_amount != null ? fmtKwacha(detail.rent_amount) : "-"],
-                  ["Balance", detail.total_balance != null ? fmtKwacha(detail.total_balance) : "-"],
+                  ["NRC", displayOptional(detail.nrc)],
+                  ["Gender", detail.gender ?? detail.room_gender ?? ""],
+                  ["Move-in", displayOptional(detail.move_in_date)],
+                  ["Monthly rent", detail.rent_amount != null ? fmtKwacha(detail.rent_amount) : ""],
+                  ["Balance", detail.total_balance != null ? fmtKwacha(detail.total_balance) : ""],
                   ["Days past due", String(detail.days_past_due ?? 0)],
-                  ["Due date", detail.due_date ?? "-"],
+                  ["Due date", displayOptional(detail.due_date)],
                   ["Last payment", detail.last_payment_at
                     ? `${detail.last_payment_at}${detail.last_payment_amount != null ? ` · ${fmtKwacha(detail.last_payment_amount)}` : ""}`
                     : "None recorded"],

@@ -4,6 +4,7 @@ import {
   summarizeBillingByStatus,
   type BillingMonth,
 } from "../billing";
+import { displayOptional, isVacantName } from "../occupancy";
 import type { BedSpace, BillingRecord, Payment, UtilityBlock } from "../types";
 
 export type FinancialReportInput = {
@@ -48,7 +49,7 @@ function round2(value: number): number {
 }
 
 function isVacant(record: BillingRecord): boolean {
-  return record.billing_status === "Vacant" || record.tenant_name.trim().toLowerCase() === "vacant";
+  return record.billing_status === "Vacant" || isVacantName(record.tenant_name);
 }
 
 /**
@@ -129,9 +130,9 @@ export function buildFinancialReport(input: FinancialReportInput): FinancialRepo
       record.house_block,
       record.room_number,
       record.bed_space,
-      record.tenant_name,
-      record.phone_number,
-      record.entry_date,
+      isVacant(record) ? "" : displayOptional(record.tenant_name),
+      isVacant(record) ? "" : displayOptional(record.phone_number),
+      isVacant(record) ? "" : displayOptional(record.entry_date),
       round2(record.current_rent),
       round2(record.accumulated_total),
       round2(record.total_balance),
@@ -309,7 +310,7 @@ export async function exportFinancialWorkbook(input: FinancialReportInput): Prom
   URL.revokeObjectURL(url);
 
   try {
-    const { persistFinancialSnapshot } = await import("../api/snapshots");
+    const { persistFinancialSnapshot } = await import("../api");
     await persistFinancialSnapshot({
       month: input.month,
       year: input.year,

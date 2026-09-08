@@ -14,6 +14,7 @@ import {
   deriveBedFromTenantAndBilling,
   isBedAssignable,
   assertUniqueActivePhone,
+  vacantBillingPatch,
 } from "../lib/occupancy";
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 import { inviteStudentToPortal, sendTenantNotification, sendWelcomeEmail } from "../lib/auth";
@@ -234,7 +235,7 @@ export function useTrackerData() {
         id: `s-${Date.now()}`,
         name: input.name,
         phone: input.phone,
-        nrc: input.nrc ?? "-",
+        nrc: input.nrc ?? "",
         email: input.email,
         moveInDate: input.moveInDate || new Date().toISOString().slice(0, 10),
         gender: input.gender,
@@ -251,7 +252,7 @@ export function useTrackerData() {
           return {
             ...r,
             tenant_name: input.name,
-            phone_number: input.phone || "-",
+            phone_number: input.phone || "",
             entry_date: student.moveInDate,
             target_month: getCurrentBillingMonth(),
             current_rent: rent,
@@ -297,7 +298,7 @@ export function useTrackerData() {
         id: input.tenantId,
         name: input.name,
         phone: input.phone,
-        nrc: input.nrc ?? "-",
+        nrc: input.nrc ?? "",
         email: input.email,
         moveInDate: input.moveInDate,
         gender: input.gender,
@@ -317,7 +318,7 @@ export function useTrackerData() {
             ? {
                 ...r,
                 tenant_name: input.name,
-                phone_number: input.phone || "-",
+                phone_number: input.phone || "",
                 entry_date: input.moveInDate,
               }
             : r,
@@ -388,14 +389,7 @@ export function useTrackerData() {
           r.billing_id === bedId
             ? {
                 ...r,
-                tenant_name: "Vacant",
-                phone_number: "-",
-                entry_date: "-",
-                target_month: "-",
-                accumulated_total: 0,
-                total_balance: 0,
-                days_past_due: 0,
-                billing_status: "Vacant" as const,
+                ...vacantBillingPatch(),
               }
             : r,
         ),

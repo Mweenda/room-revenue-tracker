@@ -1,3 +1,4 @@
+import { dbFn } from "../../server/dbFn";
 import { getSupabase } from "../supabase";
 import type { RentIncreaseMode } from "../rent";
 
@@ -29,7 +30,7 @@ export async function applyRentIncrement(input: ApplyRentIncrementInput): Promis
   if (input.bedIds.length === 0) throw new Error("Select at least one bed space");
   if (!(input.value > 0)) throw new Error("Increase value must be greater than zero");
 
-  const { data, error } = await sb.rpc("apply_rent_increment", {
+  const { data, error } = await dbFn(sb, "apply_rent_increment", {
     p_bed_ids: input.bedIds,
     p_mode: input.mode,
     p_value: input.value,

@@ -1,3 +1,4 @@
+import { dbFn } from "../../server/dbFn";
 import { getSupabase } from "../supabase";
 import {
   isNotificationKind,
@@ -50,7 +51,7 @@ export async function markStudentNotificationRead(id: string): Promise<StudentNo
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
-  const { data, error } = await sb.rpc("mark_student_notification_read", { p_id: id });
+  const { data, error } = await dbFn(sb, "mark_student_notification_read", { p_id: id });
   if (error) throw error;
   return mapNotification(data as NotificationRow);
 }
@@ -58,7 +59,7 @@ export async function markStudentNotificationRead(id: string): Promise<StudentNo
 export async function ensureRentDueNotification(): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
-  const { error } = await sb.rpc("ensure_my_rent_due_notification");
+  const { error } = await dbFn(sb, "ensure_my_rent_due_notification");
   if (error) throw error;
   return true;
 }

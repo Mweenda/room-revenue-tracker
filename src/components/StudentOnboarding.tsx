@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Shield, User, BedDouble, FileText, KeyRound, CheckCircle } from "lucide-react";
-import { completeStudentOnboarding, listVacantBedsForOnboarding } from "../lib/api/tenants";
+import { completeStudentOnboarding, listVacantBedsForOnboarding } from "../lib/api";
 import { fetchAuthenticatedStudent, linkTenantToAuthUser } from "../lib/auth";
 import { getSupabase } from "../lib/supabase";
 import { studentShellLocation } from "../lib/studentApp";
@@ -169,7 +169,7 @@ export default function StudentOnboarding({
         bedId,
         name,
         phone,
-        nrc: nrc || "-",
+        nrc: nrc,
         moveInDate,
       });
       const linked = await fetchAuthenticatedStudent() ?? await linkTenantToAuthUser(email);

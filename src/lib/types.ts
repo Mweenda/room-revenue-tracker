@@ -1,4 +1,4 @@
-export type BlockCode = "BBH" | "NWG" | "ANX" | "CRV";
+export type BlockCode = "BBH" | "UPV" | "CRV" | "ANX" | "NWG";
 export type BedStatus = "occupied" | "vacant";
 export type PayStatus = "pending" | "verified" | "rejected";
 export type IssueStatus = "open" | "in_progress" | "resolved";

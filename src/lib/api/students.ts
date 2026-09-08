@@ -1,3 +1,4 @@
+import { dbFn } from "../../server/dbFn";
 import { getSupabase } from "../supabase";
 import { inviteStudentToPortal } from "../auth";
 import type { TenantStatus, UpdateStudentAccountInput } from "../types";
@@ -131,7 +132,7 @@ export async function evictTenant(input: EvictTenantInput): Promise<EvictTenantR
   const reason = input.reason.trim();
   if (!reason) throw new Error("A reason is required to remove a student");
 
-  const { data, error } = await sb.rpc("evict_tenant", {
+  const { data, error } = await dbFn(sb, "evict_tenant", {
     p_tenant_id: input.tenantId,
     p_reason: reason,
     p_actor: input.actor ?? null,
@@ -173,12 +174,12 @@ export async function updateStudentAccount(input: UpdateStudentAccountInput): Pr
     .single();
   if (existingError) throw existingError;
 
-  const { data, error } = await sb.rpc("update_tenant", {
+  const { data, error } = await dbFn(sb, "update_tenant", {
     p_tenant_id: input.tenantId,
     p_full_name: name,
     p_phone: input.phone,
     p_email: input.email,
-    p_nrc: input.nrc ?? "-",
+    p_nrc: input.nrc ?? "",
     p_move_in_date: input.moveInDate || null,
     p_bed_space_id: input.bedSpaceId,
     p_rent_amount: input.rentAmount,
