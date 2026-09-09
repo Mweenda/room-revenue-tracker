@@ -23,6 +23,8 @@ import {
   reconcileAllOccupancy,
   reconcileBedSpace,
 } from "../../lib/api/occupancy";
+import { saveOccupancyAdmin } from "../../lib/api/occupancyAdmin";
+import type { OccupancyAdminEditInput } from "../../lib/occupancyBillingEdit";
 import {
   fetchPayments,
   recordManualPayment,
@@ -108,6 +110,8 @@ export const authRouter = router({
   currentTenantId: publicProcedure.query(({ ctx }) => ctx.tenantId),
 });
 
+const occupancyBillingStatus = z.enum(["Open Window", "Paid / Secured", "OVERDUE / UNPAID", "Grace Period"]);
+
 export const occupancyRouter = router({
   reconcileAll: landlordProcedure.mutation(() => reconcileAllOccupancy()),
   reconcileBed: landlordProcedure
@@ -119,6 +123,26 @@ export const occupancyRouter = router({
   findByEmail: authedProcedure
     .input(z.object({ email: z.string() }))
     .query(({ input }) => findTenantByEmail(input.email)),
+  saveAdmin: landlordProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      name: z.string(),
+      phone: z.string(),
+      email: z.string(),
+      moveInDate: z.string(),
+      gender: roomGender.optional(),
+      bedId: z.string(),
+      rentAmount: z.number(),
+      billingStatus: occupancyBillingStatus,
+      targetMonth: billingMonth,
+      monthsCovered: z.number().int().min(1).max(12),
+      totalBalance: z.number().optional(),
+      paymentDate: z.string(),
+      paymentAmount: z.number(),
+      paymentMethod,
+      paymentRef: z.string().optional(),
+    }))
+    .mutation(({ input }) => saveOccupancyAdmin(input as OccupancyAdminEditInput)),
 });
 
 export const bedsRouter = router({

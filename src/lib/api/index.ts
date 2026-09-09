@@ -160,3 +160,7 @@ export async function findTenantOnBed(bedId: string) {
 export async function findTenantByEmail(email: string) {
   return (await caller()).occupancy.findByEmail({ email });
 }
+
+export async function saveOccupancyAdmin(...args: Parameters<typeof import("./occupancyAdmin").saveOccupancyAdmin>) {
+  return (await caller()).occupancy.saveAdmin(args[0]);
+}

@@ -19,6 +19,7 @@ import {
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 import { inviteStudentToPortal, sendTenantNotification, sendWelcomeEmail } from "../lib/auth";
 import { deriveStudentAccounts, applyStudentAccountUpdate, applyManualVerifiedPayment, enrichStudentAccounts } from "../lib/students";
+import { applyOccupancyAdminEdit, type OccupancyAdminEditInput } from "../lib/occupancyBillingEdit";
 import { applyPaymentEdit } from "../lib/paymentsEdit";
 import { buildRentPreview, type RentIncreaseMode, type RentScope } from "../lib/rent";
 import type { RentIncrementRow } from "../lib/api/rent";
@@ -361,6 +362,26 @@ export function useTrackerData() {
         fullName: input.name.trim(),
         bedSpaceId: input.bedSpaceId,
         rentAmount: input.rentAmount,
+      };
+    },
+    [beds, billingRecords, payments, refresh, source],
+  );
+
+  const saveOccupancyAdmin = useCallback(
+    async (input: OccupancyAdminEditInput) => {
+      if (source === "supabase") {
+        const saved = await api.saveOccupancyAdmin(input);
+        await refresh();
+        return saved;
+      }
+      const next = applyOccupancyAdminEdit(beds, billingRecords, payments, input);
+      setBeds(next.beds);
+      setBillingRecords(next.billingRecords);
+      setPayments(next.payments);
+      return {
+        paymentAction: next.paymentAction,
+        payment: next.payment,
+        billing: next.billingRecords.find((row) => row.billing_id === input.bedId) ?? null,
       };
     },
     [beds, billingRecords, payments, refresh, source],
@@ -819,6 +840,7 @@ export function useTrackerData() {
     applyRentIncrement,
     updateStudent,
     updateStudentAccount,
+    saveOccupancyAdmin,
     uploadStudentProfilePhoto,
     uploadStudentMedia,
     updateLandlordProfile,

@@ -13,7 +13,8 @@ import { toast } from "sonner";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useTrackerData } from "../hooks/useTrackerData";
 import { blocksInData, BILLING_MONTHS, formatBillingPeriodLabel, formatMonthYear, getCurrentBillingMonth, getCurrentYear, type BillingMonth } from "../lib/billing";
-import { occupancyReport } from "../lib/paymentTracking";
+import { addBillingMonths, occupancyReport } from "../lib/paymentTracking";
+import { occupancyCoverageFromBilling, occupancyEditDefaults, type OccupancyAdminEditInput } from "../lib/occupancyBillingEdit";
 import { formatHeaderDateTime, useLiveDateTime } from "../hooks/useLiveDateTime";
 import { isBedAssignable, displayOptional, isBillingVacant, isVacantName } from "../lib/occupancy";
 import { LandingPage } from "../components/LandingPage";
@@ -54,24 +55,25 @@ import type { StudentAccountRow } from "../lib/api/students";
 import type { ApplyRentIncrementResult } from "./components/RentIncrementDialog";
 import type { EvictionResult } from "./views/StudentsView";
 import type { RentIncreaseMode, RentScope } from "../lib/rent";
-import type {
-  BedSpace,
-  BillingRecord,
-  BillingStatus,
-  BlockCode,
-  IssueCategory,
-  IssueStatus,
-  LandlordView,
-  MaintenanceIssue,
-  OnboardStudentInput,
-  Payment,
-  PaymentMethod,
-  PayStatus,
-  RoomGender,
-  StudentView,
-  TenantStatus,
-  UpdateStudentAccountInput,
-  UtilityBlock,
+import {
+  PAYMENT_METHODS,
+  type BedSpace,
+  type BillingRecord,
+  type BillingStatus,
+  type BlockCode,
+  type IssueCategory,
+  type IssueStatus,
+  type LandlordView,
+  type MaintenanceIssue,
+  type OnboardStudentInput,
+  type Payment,
+  type PaymentMethod,
+  type PayStatus,
+  type RoomGender,
+  type StudentView,
+  type TenantStatus,
+  type UpdateStudentAccountInput,
+  type UtilityBlock,
 } from "../lib/types";
 
 type EvictStudentFn = (input: {
@@ -1140,13 +1142,13 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
 
 // ─── Portal View ─────────────────────────────────────────────────────────────
 
-function PortalView({ beds, billingMap, payments, billingMonth, onboard, updateStudent, vacateBed }: {
+function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOccupancyAdmin, vacateBed }: {
   beds: BedSpace[];
   billingMap: Map<string, BillingRecord>;
   payments: Payment[];
   billingMonth: BillingMonth;
   onboard: (input: OnboardStudentInput) => Promise<unknown>;
-  updateStudent: (input: { tenantId: string; name: string; phone: string; email: string; moveInDate: string; gender?: RoomGender }) => Promise<unknown>;
+  saveOccupancyAdmin: (input: OccupancyAdminEditInput) => Promise<unknown>;
   vacateBed: (bedId: string) => Promise<void>;
 }) {
   const [drawerBed, setDrawerBed] = useState<BedSpace | null>(null);
@@ -1155,6 +1157,7 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, updateS
   const [showVacateConfirm, setShowVacateConfirm] = useState(false);
   const [selectedBlock, setSelectedBlock] = useState<BlockCode | "ALL">("ALL");
   const [form, setForm] = useState({ name: "", phone: "", email: "", bedId: "", moveInDate: "", gender: "" as RoomGender | "" });
+  const [occupancyForm, setOccupancyForm] = useState<OccupancyAdminEditInput | null>(null);
   const [onboardSuccess, setOnboardSuccess] = useState(false);
   const [onboardError, setOnboardError] = useState<string | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
@@ -1174,20 +1177,23 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, updateS
     setEditMode(false);
     setShowVacateConfirm(false);
     setDrawerError(null);
+    setOccupancyForm(null);
   }
 
   async function handleSaveTenant() {
-    if (!drawerBed?.student?.id || !form.name.trim()) return;
+    if (!drawerBed?.student?.id || !occupancyForm?.name.trim()) return;
     setSaving(true);
     setDrawerError(null);
     try {
-      await updateStudent({
+      await saveOccupancyAdmin({
+        ...occupancyForm,
         tenantId: drawerBed.student.id,
-        name: form.name.trim(),
-        phone: form.phone,
-        email: form.email,
-        moveInDate: form.moveInDate || drawerBed.student.moveInDate,
-        gender: form.gender || undefined,
+        bedId: drawerBed.id,
+        monthsCovered: occupancyForm.billingStatus === "Paid / Secured" ? occupancyForm.monthsCovered : 1,
+        paymentAmount: Number(occupancyForm.paymentAmount) || 0,
+        totalBalance: occupancyForm.billingStatus === "OVERDUE / UNPAID" || occupancyForm.billingStatus === "Open Window" || occupancyForm.billingStatus === "Grace Period"
+          ? Number(occupancyForm.totalBalance ?? occupancyForm.rentAmount)
+          : 0,
       });
       setEditMode(false);
       setShowVacateConfirm(false);
@@ -1348,28 +1354,28 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, updateS
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Tenant Profile</h3>
                       {!editMode && (
-                        <button onClick={() => { setEditMode(true); setShowVacateConfirm(false); setDrawerError(null); setForm({ name: drawerBed.student?.name || "", phone: drawerBed.student?.phone || "", email: drawerBed.student?.email || "", bedId: drawerBed.id, moveInDate: drawerBed.student?.moveInDate || "", gender: drawerBed.student?.gender ?? drawerBed.roomGender ?? "" }); }} className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1">
+                        <button onClick={() => { setEditMode(true); setShowVacateConfirm(false); setDrawerError(null); setOccupancyForm(occupancyEditDefaults(drawerBed, br, lastPay ?? null, billingMonth)); }} className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1">
                           <Edit3 size={14} /> Edit
                         </button>
                       )}
                     </div>
-                    {editMode ? (
+                    {editMode && occupancyForm ? (
                       <div className="bg-slate-50 rounded-xl p-4 space-y-3">
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
-                          <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                          <input type="text" value={occupancyForm.name} onChange={(e) => setOccupancyForm({ ...occupancyForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
-                          <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                          <input type="text" value={occupancyForm.phone} onChange={(e) => setOccupancyForm({ ...occupancyForm, phone: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
-                          <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                          <input type="email" value={occupancyForm.email} onChange={(e) => setOccupancyForm({ ...occupancyForm, email: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Gender</label>
-                          <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value as RoomGender | "" })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                          <select value={occupancyForm.gender ?? ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, gender: e.target.value as RoomGender | undefined })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
                             <option value="">Select gender</option>
                             <option value="Male">Male</option>
                             <option value="Female">Female</option>
@@ -1377,11 +1383,15 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, updateS
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Move-in Date</label>
-                          <input type="date" value={form.moveInDate} onChange={(e) => setForm({ ...form, moveInDate: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                          <input type="date" value={occupancyForm.moveInDate} onChange={(e) => setOccupancyForm({ ...occupancyForm, moveInDate: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Monthly Rent</label>
+                          <input type="number" min="1" value={occupancyForm.rentAmount || ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, rentAmount: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                         </div>
                         <div className="flex gap-2 pt-2">
-                          <button onClick={() => { setEditMode(false); setShowVacateConfirm(false); setDrawerError(null); }} disabled={saving || vacating} className="flex-1 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50">Cancel</button>
-                          <button onClick={() => void handleSaveTenant()} disabled={saving || vacating || !form.name.trim()} className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50">
+                          <button onClick={() => { setEditMode(false); setShowVacateConfirm(false); setDrawerError(null); setOccupancyForm(null); }} disabled={saving || vacating} className="flex-1 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50">Cancel</button>
+                          <button onClick={() => void handleSaveTenant()} disabled={saving || vacating || !occupancyForm.name.trim()} className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50">
                             {saving ? "Saving…" : "Save Changes"}
                           </button>
                         </div>
@@ -1418,7 +1428,7 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, updateS
                     <div>
                       <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Lease Details</h3>
                       <div className="bg-slate-50 rounded-xl p-4 space-y-2.5">
-                        <InfoRow label="Monthly Rent" value={fmt(drawerBed.rentAmount)} icon={DollarSign} />
+                        {!editMode && <InfoRow label="Monthly Rent" value={fmt(drawerBed.rentAmount)} icon={DollarSign} />}
                         <InfoRow label="Block" value={drawerBed.blockCode} icon={Building2} />
                         <InfoRow label="Room" value={String(drawerBed.roomNumber)} icon={Hash} />
                         <InfoRow label="Bed" value={drawerBed.bedLetter} icon={Hash} />
@@ -1427,17 +1437,90 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, updateS
                     {br && (
                       <div>
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Billing</h3>
-                        <div className={`rounded-xl p-4 space-y-2.5 border ${s.border} ${s.bg}`}>
-                          <InfoRow label="Balance" value={fmt(br.total_balance)} />
-                          <InfoRow label="Target Month" value={displayOptional(br.target_month)} />
-                          <InfoRow label="Days Past Due" value={br.days_past_due > 0 ? `${br.days_past_due} days` : "On time"} />
-                          {lastPay && (
-                            <InfoRow
-                              label="Last Payment"
-                              value={`${fmt(lastPay.amount)} · ${lastPay.submittedAt} · ${lastPay.method}`}
-                            />
-                          )}
-                        </div>
+                        {editMode && occupancyForm ? (
+                          <div className={`rounded-xl p-4 space-y-3 border ${s.border} ${s.bg}`}>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
+                              <select
+                                value={occupancyForm.billingStatus}
+                                onChange={(e) => {
+                                  const billingStatus = e.target.value as OccupancyAdminEditInput["billingStatus"];
+                                  setOccupancyForm({
+                                    ...occupancyForm,
+                                    billingStatus,
+                                    monthsCovered: billingStatus === "Paid / Secured" ? occupancyForm.monthsCovered : 1,
+                                    totalBalance: billingStatus === "Paid / Secured" ? 0 : (occupancyForm.totalBalance ?? occupancyForm.rentAmount),
+                                  });
+                                }}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                              >
+                                <option value="Paid / Secured">Paid / Secured</option>
+                                <option value="OVERDUE / UNPAID">Overdue</option>
+                                <option value="Open Window">Open Window</option>
+                                <option value="Grace Period">Grace Period</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Target Month</label>
+                              <select
+                                value={occupancyForm.targetMonth}
+                                onChange={(e) => setOccupancyForm({ ...occupancyForm, targetMonth: e.target.value as OccupancyAdminEditInput["targetMonth"] })}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                              >
+                                {BILLING_MONTHS.map((month) => <option key={month} value={month}>{month}</option>)}
+                              </select>
+                            </div>
+                            {occupancyForm.billingStatus !== "Paid / Secured" && (
+                              <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Balance</label>
+                                <input type="number" min="0" value={occupancyForm.totalBalance ?? ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, totalBalance: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
+                              </div>
+                            )}
+                            {occupancyForm.billingStatus === "Paid / Secured" && (
+                              <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">Coverage</label>
+                                <div className="flex gap-2 mb-2">
+                                  <button type="button" onClick={() => setOccupancyForm({ ...occupancyForm, monthsCovered: 1 })} className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold border ${occupancyForm.monthsCovered <= 1 ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"}`}>Single month</button>
+                                  <button type="button" onClick={() => setOccupancyForm({ ...occupancyForm, monthsCovered: Math.max(2, occupancyForm.monthsCovered) })} className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold border ${occupancyForm.monthsCovered > 1 ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"}`}>Multiple months</button>
+                                </div>
+                                {occupancyForm.monthsCovered > 1 && (
+                                  <input type="number" min={2} max={12} value={occupancyForm.monthsCovered} onChange={(e) => setOccupancyForm({ ...occupancyForm, monthsCovered: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
+                                )}
+                                <p className="text-[11px] text-slate-500 mt-1.5">Secured through {addBillingMonths(occupancyForm.targetMonth, Math.max(1, occupancyForm.monthsCovered) - 1)}.</p>
+                              </div>
+                            )}
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Payment received</label>
+                              <input type="date" value={occupancyForm.paymentDate} onChange={(e) => setOccupancyForm({ ...occupancyForm, paymentDate: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
+                              <p className="text-[11px] text-slate-500 mt-1.5">{lastPay ? "Saving updates this receipt. It will not add a second payment." : "Add a date and amount to record the receipt."}</p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Payment amount</label>
+                              <input type="number" min="0" value={occupancyForm.paymentAmount || ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, paymentAmount: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Payment method</label>
+                              <select value={occupancyForm.paymentMethod} onChange={(e) => setOccupancyForm({ ...occupancyForm, paymentMethod: e.target.value as PaymentMethod })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                                {PAYMENT_METHODS.map((method) => <option key={method} value={method}>{method}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={`rounded-xl p-4 space-y-2.5 border ${s.border} ${s.bg}`}>
+                            <InfoRow label="Balance" value={fmt(br.total_balance)} />
+                            <InfoRow label="Target Month" value={displayOptional(br.target_month)} />
+                            {br.billing_status === "Paid / Secured" && occupancyCoverageFromBilling(br, billingMonth).monthsCovered > 1 && (
+                              <InfoRow label="Coverage" value={`${occupancyCoverageFromBilling(br, billingMonth).monthsCovered} months through ${br.target_month}`} />
+                            )}
+                            <InfoRow label="Days Past Due" value={br.days_past_due > 0 ? `${br.days_past_due} days` : "On time"} />
+                            {lastPay && (
+                              <InfoRow
+                                label="Last Payment"
+                                value={`${fmt(lastPay.amount)} · ${lastPay.submittedAt} · ${lastPay.method}`}
+                              />
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
@@ -2263,7 +2346,7 @@ const BOTTOM_NAV: { id: LandlordView; label: string; icon: React.ElementType }[]
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudent, updateStudentAccount, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, updatePay, saveUtility, toggleSettled, updateIssueStatus, refreshData }: {
+function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudentAccount, saveOccupancyAdmin, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, updatePay, saveUtility, toggleSettled, updateIssueStatus, refreshData }: {
   beds: BedSpace[];
   billingRecords: BillingRecord[];
   billingMap: Map<string, BillingRecord>;
@@ -2276,8 +2359,8 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   onLandlordProfileSave: (input: any) => Promise<any>;
   onLogout: () => void;
   onboard: (input: OnboardStudentInput) => Promise<unknown>;
-  updateStudent: (input: { tenantId: string; name: string; phone: string; email: string; moveInDate: string; gender?: RoomGender }) => Promise<unknown>;
   updateStudentAccount: (input: UpdateStudentAccountInput) => Promise<unknown>;
+  saveOccupancyAdmin: (input: OccupancyAdminEditInput) => Promise<unknown>;
   vacateBed: (bedId: string) => Promise<void>;
   evictStudent: EvictStudentFn;
   applyRentIncrement: ApplyRentIncrementFn;
@@ -2409,7 +2492,7 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
               Could not refresh tracker data from the server. {dataError}
             </StatusBanner>
           )}
-          {view === "portal"    && <PortalView beds={beds} billingMap={monthBillingMap} payments={payments} billingMonth={billingMonth} onboard={onboard} updateStudent={updateStudent} vacateBed={vacateBed} />}
+          {view === "portal"    && <PortalView beds={beds} billingMap={monthBillingMap} payments={payments} billingMonth={billingMonth} onboard={onboard} saveOccupancyAdmin={saveOccupancyAdmin} vacateBed={vacateBed} />}
           {view === "revenue"   && <RevenueView billingRecords={monthBillingRecords} billingMonth={billingMonth} />}
           {view === "pay"       && (
             <PayView
@@ -2779,10 +2862,13 @@ function AppRoutes() {
       }}
       onLogout={handleLogout}
       onboard={tracker.onboard}
-      updateStudent={tracker.updateStudent}
       updateStudentAccount={async (input) => {
         assertLandlord(currentUser, "edit a student");
         return tracker.updateStudentAccount(input);
+      }}
+      saveOccupancyAdmin={async (input) => {
+        assertLandlord(currentUser, "edit occupancy billing");
+        return tracker.saveOccupancyAdmin(input);
       }}
       vacateBed={tracker.vacateBed}
       verifyPay={tracker.verifyPay}
