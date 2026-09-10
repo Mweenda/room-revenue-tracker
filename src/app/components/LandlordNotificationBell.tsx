@@ -102,7 +102,7 @@ export function LandlordNotificationBell({
         <PopoverContent
           align="end"
           sideOffset={8}
-          className="w-[min(24rem,calc(100vw-2rem))] p-0 overflow-hidden"
+          className="w-[min(24rem,calc(100vw-2rem))] p-0 overflow-hidden bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-white/50 dark:border-white/10 shadow-2xl"
         >
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
             <div>

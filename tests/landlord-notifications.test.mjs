@@ -208,3 +208,16 @@ test("unread rows sort above older read ones", () => {
   assert.equal(items[0].id, "2");
   assert.equal(inbox.unreadLandlordCount(items), 1);
 });
+
+test("opened landlord notifications stay read after a later fetch", () => {
+  const fetched = [
+    {
+      id: "1", landlordId: "l", tenantId: null, bedSpaceId: "A", paymentId: null, issueId: null,
+      kind: "rent_overdue", title: "a", preview: "a", body: "a", metadata: {},
+      readAt: null, createdAt: "2026-09-07T00:00:00Z",
+    },
+  ];
+  const merged = inbox.applySeenLandlordInbox(fetched, ["1"], "2026-09-10T10:00:00Z");
+  assert.equal(merged[0].readAt, "2026-09-10T10:00:00Z");
+  assert.equal(inbox.unreadLandlordCount(merged), 0);
+});

@@ -84,6 +84,46 @@ test("opening a message marks only that row read", () => {
   assert.equal(after[1].readAt, null);
 });
 
+test("seen messages stay read after a later refresh with a new row id", () => {
+  const local = {
+    id: "local:rent_due:Jun:OVERDUE / UNPAID",
+    tenantId: "t",
+    kind: "rent_due",
+    title: "Rent is overdue",
+    preview: "x",
+    body: "x",
+    metadata: { targetMonth: "Jun", status: "OVERDUE / UNPAID" },
+    readAt: "2026-09-01T10:00:00Z",
+    createdAt: "2026-06-01T08:00:00Z",
+  };
+  const seen = inbox.inboxIdentityKeys(local);
+  const server = [{
+    id: "uuid-1",
+    tenantId: "t",
+    kind: "rent_due",
+    title: "Rent is overdue",
+    preview: "x",
+    body: "x",
+    metadata: { targetMonth: "Jun", status: "OVERDUE / UNPAID" },
+    dedupeKey: "rent_due:Jun:OVERDUE / UNPAID",
+    readAt: null,
+    createdAt: "2026-06-01T08:00:00Z",
+  }];
+  const merged = inbox.applyInboxMemory(server, seen, [], "2026-09-10T10:00:00Z");
+  assert.equal(merged[0].readAt, "2026-09-10T10:00:00Z");
+});
+
+test("dismissed messages leave the inbox and stay gone after refresh", () => {
+  const items = [
+    { id: "1", tenantId: "t", kind: "welcome", title: "a", preview: "a", body: "a", metadata: {}, dedupeKey: "welcome:assigned", readAt: null, createdAt: "2026-08-01T00:00:00Z" },
+    { id: "2", tenantId: "t", kind: "house", title: "b", preview: "b", body: "b", metadata: {}, dedupeKey: "house:BBH:July", readAt: null, createdAt: "2026-08-02T00:00:00Z" },
+  ];
+  const remaining = inbox.dismissInboxItem(items, "1");
+  assert.deepEqual(remaining.map((row) => row.id), ["2"]);
+  const refreshed = inbox.applyInboxMemory(items, [], inbox.inboxIdentityKeys(items[0]));
+  assert.deepEqual(refreshed.map((row) => row.id), ["2"]);
+});
+
 test("local inbox includes rent due, payment outcomes, maintenance, and house notices", () => {
   const items = inbox.deriveLocalInbox({
     tenantId: "s-1",

@@ -15,7 +15,9 @@ type NotificationRow = {
   preview: string;
   body: string;
   metadata: NotificationDetails | null;
+  dedupe_key?: string | null;
   read_at: string | null;
+  dismissed_at?: string | null;
   created_at: string;
 };
 
@@ -29,7 +31,9 @@ function mapNotification(row: NotificationRow): StudentNotification {
     preview: row.preview,
     body: row.body,
     metadata: row.metadata ?? {},
+    dedupeKey: row.dedupe_key ?? null,
     readAt: row.read_at,
+    dismissedAt: row.dismissed_at ?? null,
     createdAt: row.created_at,
   };
 }
@@ -40,11 +44,12 @@ export async function fetchStudentNotifications(): Promise<StudentNotification[]
 
   const { data, error } = await sb
     .from("student_notifications")
-    .select("id, tenant_id, kind, title, preview, body, metadata, read_at, created_at")
+    .select("id, tenant_id, kind, title, preview, body, metadata, dedupe_key, read_at, dismissed_at, created_at")
+    .is("dismissed_at", null)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []).map(mapNotification);
+  return (data ?? []).map((row) => mapNotification(row as NotificationRow));
 }
 
 export async function markStudentNotificationRead(id: string): Promise<StudentNotification> {
@@ -62,4 +67,13 @@ export async function ensureRentDueNotification(): Promise<boolean> {
   const { error } = await dbFn(sb, "ensure_my_rent_due_notification");
   if (error) throw error;
   return true;
+}
+
+export async function dismissStudentNotification(id: string): Promise<StudentNotification> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Supabase not configured");
+
+  const { data, error } = await dbFn(sb, "dismiss_student_notification", { p_id: id });
+  if (error) throw error;
+  return mapNotification(data as NotificationRow);
 }

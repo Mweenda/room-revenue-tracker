@@ -63,6 +63,10 @@ export async function markStudentNotificationRead(id: string) {
   return (await caller()).notifications.markRead({ id });
 }
 
+export async function dismissStudentNotification(id: string) {
+  return (await caller()).notifications.dismiss({ id });
+}
+
 export async function ensureRentDueNotification() {
   return (await caller()).notifications.ensureRentDue();
 }

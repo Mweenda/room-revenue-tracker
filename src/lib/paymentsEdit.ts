@@ -45,19 +45,37 @@ export function lastVerifiedPayment(
   return matches[0] ?? null;
 }
 
+export function paymentSearchHaystack(
+  payment: Pick<Payment, "studentName" | "bedSpaceId" | "transactionRef" | "method" | "amount" | "submittedAt" | "status">,
+): string {
+  const amount = Number.isFinite(payment.amount) ? String(payment.amount) : "";
+  const amountGrouped = Number.isFinite(payment.amount) ? payment.amount.toLocaleString("en-US") : "";
+  const bed = payment.bedSpaceId ?? "";
+  const submittedAt = payment.submittedAt ?? "";
+  return [
+    payment.studentName,
+    bed,
+    bed.replace(/[^a-zA-Z0-9]/g, ""),
+    payment.method,
+    payment.transactionRef,
+    amount,
+    amountGrouped,
+    amount ? `k${amount}` : "",
+    amountGrouped ? `k${amountGrouped}` : "",
+    submittedAt,
+    submittedAt.replace(/-/g, " "),
+    payment.status,
+  ].join(" ").toLowerCase();
+}
+
 export function matchesPaymentSearch(
-  payment: Pick<Payment, "studentName" | "bedSpaceId" | "transactionRef">,
+  payment: Pick<Payment, "studentName" | "bedSpaceId" | "transactionRef" | "method" | "amount" | "submittedAt" | "status">,
   term: string,
 ): boolean {
   const needle = term.trim().toLowerCase();
   if (!needle) return true;
-  const bed = payment.bedSpaceId.toLowerCase();
+  const haystack = paymentSearchHaystack(payment);
   const compactNeedle = needle.replace(/[^a-z0-9]/g, "");
-  const compactBed = bed.replace(/[^a-z0-9]/g, "");
-  return (
-    bed.includes(needle) ||
-    (compactNeedle.length > 0 && compactBed.includes(compactNeedle)) ||
-    payment.studentName.toLowerCase().includes(needle) ||
-    payment.transactionRef.toLowerCase().includes(needle)
-  );
+  const compactHaystack = haystack.replace(/[^a-z0-9]/g, "");
+  return haystack.includes(needle) || (compactNeedle.length > 0 && compactHaystack.includes(compactNeedle));
 }

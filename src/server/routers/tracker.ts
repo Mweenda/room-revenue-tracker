@@ -16,6 +16,7 @@ import {
   ensureRentDueNotification,
   fetchStudentNotifications,
   markStudentNotificationRead,
+  dismissStudentNotification,
 } from "../../lib/api/notifications";
 import {
   findTenantByEmail,
@@ -296,6 +297,9 @@ export const notificationsRouter = router({
   markRead: authedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ input }) => markStudentNotificationRead(input.id)),
+  dismiss: authedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ input }) => dismissStudentNotification(input.id)),
   ensureRentDue: authedProcedure.mutation(() => ensureRentDueNotification()),
 });
 

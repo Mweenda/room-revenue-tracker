@@ -27,11 +27,12 @@ import { adminSignOut, changeStudentPassword, linkTenantToAuthUser, signOutStude
 import { ColorModeProvider, ColorModeRoot, useColorMode } from "../lib/colorMode";
 import { getSupabase } from "../lib/supabase";
 import { Toaster } from "./components/ui/sonner";
-import { Badge, KpiCard, SectionCard, StatusBanner } from "./components/primitives";
+import { Badge, KpiCard, SectionCard, StatusBanner, GLASS_SOFT } from "./components/primitives";
 import SpreadsheetPaymentBoard from "./components/SpreadsheetPaymentBoard";
 import StudentsView from "./views/StudentsView";
 import ReportsView from "./views/ReportsView";
 import { StudentNotificationsView } from "./views/StudentNotificationsView";
+import { Collapsible, CollapsibleTrigger } from "./components/ui/collapsible";
 import { StudentAppDownloadCard } from "./components/StudentAppDownload";
 import { StudentCollapsingHeader } from "./components/StudentCollapsingHeader";
 import { StudentPortalNav } from "./components/StudentPortalNav";
@@ -1747,7 +1748,7 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, BBH, UPV, ref…"
+              placeholder="Search student, bed, method, ref, amount, date, status…"
               className="pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full min-h-[36px]"
               aria-label="Search payment queue"
             />
@@ -2021,8 +2022,8 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
   };
   const billingRec = myBed ? billingMap.get(myBed.identifier) : undefined;
   const myPayments = myBed ? payments.filter((p) => p.bedSpaceId === myBed.id || p.studentName === student.name) : [];
-
   const [payForm, setPayForm] = useState({ method: "Airtel" as "Airtel" | "MTN", ref: "", amount: String(myBed?.rentAmount ?? 1200) });
+  const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false);
   const [paySubmitted, setPaySubmitted] = useState(false);
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -2112,6 +2113,10 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
   const bStatus = billingRec?.billing_status ?? "Open Window";
   const bStyle = billingStatusStyle[bStatus];
   const pendingPayments = myPayments.filter((p) => p.status === "pending");
+  const historyPayments = [...myPayments].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt) || b.id.localeCompare(a.id));
+  const HISTORY_PREVIEW = 3;
+  const historyHasMore = historyPayments.length > HISTORY_PREVIEW;
+  const visibleHistory = paymentHistoryOpen || !historyHasMore ? historyPayments : historyPayments.slice(0, HISTORY_PREVIEW);
   const myIssues = myBed ? issues.filter((issue) => issue.bedSpaceId === myBed.id) : [];
   const myUtilities = myBed ? utilities : [];
   const inbox = useStudentInbox({
@@ -2232,16 +2237,26 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
                   </div>
                 )}
 
-                <SectionCard title="Payment History">
+                <Collapsible open={paymentHistoryOpen} onOpenChange={setPaymentHistoryOpen}>
+                <SectionCard
+                  className={GLASS_SOFT}
+                  title="Payment History"
+                  action={historyHasMore ? (
+                    <CollapsibleTrigger className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-800 shadow-sm">
+                      {paymentHistoryOpen ? "Show less" : `Show all (${historyPayments.length})`}
+                      <ChevronDown size={14} className={`transition-transform duration-200 ${paymentHistoryOpen ? "rotate-180" : ""}`} />
+                    </CollapsibleTrigger>
+                  ) : undefined}
+                >
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm min-w-[360px]">
-                      <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                      <thead className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                         <tr><th className="text-left px-5 py-3 font-semibold">Date</th><th className="text-left px-5 py-3 font-semibold hidden sm:table-cell">Method</th><th className="text-right px-5 py-3 font-semibold">Amount</th><th className="text-left px-5 py-3 font-semibold">Status</th></tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {myPayments.length === 0 ? <tr><td colSpan={4} className="px-5 py-8 text-center text-slate-400">No payment records yet.</td></tr>
-                          : myPayments.map((p) => (
-                            <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                        {historyPayments.length === 0 ? <tr><td colSpan={4} className="px-5 py-8 text-center text-slate-400">No payment records yet.</td></tr>
+                          : visibleHistory.map((p) => (
+                            <tr key={p.id} className="hover:bg-white/50 dark:hover:bg-slate-800/60 transition-colors">
                               <td className="px-5 py-3 text-slate-700 dark:text-slate-300 text-xs">{p.submittedAt}</td>
                               <td className="px-5 py-3 font-bold text-xs hidden sm:table-cell dark:text-slate-200">{p.method}</td>
                               <td className="px-5 py-3 text-right font-bold text-slate-900 dark:text-slate-100">{fmt(p.amount)}</td>
@@ -2252,6 +2267,7 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
                     </table>
                   </div>
                 </SectionCard>
+                </Collapsible>
 
                 <SectionCard title="Submit Payment Proof">
                   <div className="p-5 space-y-4">
@@ -2332,6 +2348,7 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
             loading={inbox.loading}
             onOpen={inbox.open}
             onBack={inbox.close}
+            onDismiss={inbox.dismiss}
           />
         )}
         {view === "profile" && <StudentProfileView bed={myBed} billingRecord={billingRec} onSave={updateStudent} onPhotoUpload={uploadStudentProfilePhoto} />}

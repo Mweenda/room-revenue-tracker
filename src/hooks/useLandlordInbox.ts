@@ -8,6 +8,7 @@ import {
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 import { isVacantName } from "../lib/occupancy";
 import {
+  applySeenLandlordInbox,
   deriveLocalLandlordInbox,
   markAllLandlordNotificationsRead,
   markLandlordNotificationRead,
@@ -16,6 +17,38 @@ import {
   type LandlordNotification,
 } from "../lib/landlordNotifications";
 import type { BillingRecord, MaintenanceIssue, Payment } from "../lib/types";
+
+const READ_STORAGE_KEY = "rrt-landlord-inbox-read";
+
+function readSeenIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(READ_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistSeenIds(ids: Set<string>) {
+  try {
+    window.localStorage.setItem(READ_STORAGE_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+function rememberSeen(ids: string[]) {
+  const next = readSeenIds();
+  for (const id of ids) next.add(id);
+  persistSeenIds(next);
+  return next;
+}
+
+function withSeen(rows: LandlordNotification[]): LandlordNotification[] {
+  return sortLandlordInbox(applySeenLandlordInbox(rows, readSeenIds()));
+}
 
 function inboxSignature(
   billingRecords: BillingRecord[],
@@ -51,11 +84,11 @@ export function useLandlordInbox(input: {
       return;
     }
     if (!isSupabaseConfigured) {
-      setItems(deriveLocalLandlordInbox({
+      setItems(withSeen(deriveLocalLandlordInbox({
         billingRecords: input.billingRecords,
         payments: input.payments,
         issues: input.issues,
-      }));
+      })));
       return;
     }
 
@@ -63,7 +96,7 @@ export function useLandlordInbox(input: {
     try {
       await ensureLandlordInbox();
       const rows = await fetchLandlordNotifications();
-      setItems(sortLandlordInbox(rows));
+      setItems(withSeen(rows));
     } catch {
       // Keep the last successful inbox rather than inventing rows.
     } finally {
@@ -89,7 +122,7 @@ export function useLandlordInbox(input: {
         { event: "*", schema: "public", table: "landlord_notifications" },
         () => {
           void fetchLandlordNotifications()
-            .then((rows) => setItems(sortLandlordInbox(rows)))
+            .then((rows) => setItems(withSeen(rows)))
             .catch(() => undefined);
         },
       )
@@ -102,12 +135,14 @@ export function useLandlordInbox(input: {
 
   const open = useCallback(async (id: string) => {
     const current = items.find((item) => item.id === id);
-    if (!current || current.readAt) return current ?? null;
+    if (!current) return current ?? null;
+    rememberSeen([id]);
+    if (current.readAt) return current;
 
     if (isSupabaseConfigured && !id.startsWith("local:")) {
       try {
         const updated = await markLandlordNotificationReadRemote(id);
-        setItems((prev) => sortLandlordInbox(prev.map((item) => (item.id === id ? updated : item))));
+        setItems((prev) => withSeen(prev.map((item) => (item.id === id ? updated : item))));
         return updated;
       } catch {
         // Fall through so the unread badge still clears.
@@ -120,10 +155,11 @@ export function useLandlordInbox(input: {
 
   const markAllRead = useCallback(async () => {
     if (unreadLandlordCount(items) === 0) return;
+    rememberSeen(items.map((item) => item.id));
     if (isSupabaseConfigured && items.some((item) => !item.id.startsWith("local:"))) {
       try {
         await markAllLandlordNotificationsReadRemote();
-        setItems((prev) => sortLandlordInbox(markAllLandlordNotificationsRead(prev)));
+        setItems((prev) => withSeen(markAllLandlordNotificationsRead(prev)));
         return;
       } catch {
         // Fall through.

@@ -7,6 +7,10 @@ import { Badge as ShadBadge } from "./ui/badge";
 export const HOVER_SURFACE =
   "transition-all duration-200 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900";
 export const HOVER_ROW = "transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/80";
+export const GLASS_PANEL =
+  "bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border border-white/50 dark:border-white/10 shadow-2xl";
+export const GLASS_SOFT =
+  "bg-white/70 dark:bg-slate-900/65 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-lg";
 
 export function Badge({ label, className }: { label: string; className: string }) {
   return (

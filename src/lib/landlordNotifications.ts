@@ -193,6 +193,19 @@ export function markAllLandlordNotificationsRead(
   return items.map((item) => (item.readAt ? item : { ...item, readAt }));
 }
 
+export function applySeenLandlordInbox(
+  items: LandlordNotification[],
+  seenIds: Iterable<string>,
+  seenAt = new Date().toISOString(),
+): LandlordNotification[] {
+  const seen = new Set(seenIds);
+  return items.map((item) => {
+    if (item.readAt) return item;
+    if (seen.has(item.id)) return { ...item, readAt: seenAt };
+    return item;
+  });
+}
+
 export function formatLandlordInboxTime(iso: string, now = new Date()): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";

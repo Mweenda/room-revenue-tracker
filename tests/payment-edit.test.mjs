@@ -51,6 +51,20 @@ test('payment queue search matches block and bed identifiers', () => {
   assert.equal(rows.filter((row) => matchesPaymentSearch(row, '  ')).length, 2);
 });
 
+test('payment queue search matches method, amount, date and status', () => {
+  const rows = [
+    { studentName: 'Ada Lovelace', bedSpaceId: 'BBH-1-A', transactionRef: 'AIR-1', method: 'Airtel', amount: 900, submittedAt: '2026-09-03', status: 'pending' },
+    { studentName: 'Maika Nengo', bedSpaceId: 'UPV-10-D', transactionRef: 'CASH-1', method: 'Cash', amount: 1200, submittedAt: '2026-08-01', status: 'verified' },
+  ];
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'airtel')).map((row) => row.bedSpaceId), ['BBH-1-A']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'cash')).map((row) => row.bedSpaceId), ['UPV-10-D']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, '900')).map((row) => row.bedSpaceId), ['BBH-1-A']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'k1,200')).map((row) => row.bedSpaceId), ['UPV-10-D']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, '2026-08-01')).map((row) => row.bedSpaceId), ['UPV-10-D']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'pending')).map((row) => row.bedSpaceId), ['BBH-1-A']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'verified')).map((row) => row.bedSpaceId), ['UPV-10-D']);
+});
+
 test('student rows expose days past due, last payment and gender', () => {
   const beds = [{
     id: 'BBH-1-A', blockCode: 'BBH', roomNumber: 1, bedLetter: 'A', identifier: 'BBH-1-A',

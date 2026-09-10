@@ -41,7 +41,9 @@ export interface StudentNotification {
   preview: string;
   body: string;
   metadata: NotificationDetails;
+  dedupeKey?: string | null;
   readAt: string | null;
+  dismissedAt?: string | null;
   createdAt: string;
 }
 
@@ -222,6 +224,32 @@ export function markNotificationRead(
   return items.map((item) => (item.id === id && !item.readAt ? { ...item, readAt } : item));
 }
 
+export function inboxIdentityKeys(item: Pick<StudentNotification, "id" | "kind" | "metadata" | "dedupeKey">): string[] {
+  const dedupe = item.dedupeKey || notificationDedupeKey(item.kind, item.metadata);
+  return [...new Set([item.id, dedupe].filter((key): key is string => Boolean(key)))];
+}
+
+export function applyInboxMemory(
+  items: StudentNotification[],
+  seenKeys: Iterable<string>,
+  dismissedKeys: Iterable<string> = [],
+  seenAt = new Date().toISOString(),
+): StudentNotification[] {
+  const seen = new Set(seenKeys);
+  const dismissed = new Set(dismissedKeys);
+  return items
+    .filter((item) => !item.dismissedAt && !inboxIdentityKeys(item).some((key) => dismissed.has(key)))
+    .map((item) => {
+      if (item.readAt) return item;
+      if (inboxIdentityKeys(item).some((key) => seen.has(key))) return { ...item, readAt: seenAt };
+      return item;
+    });
+}
+
+export function dismissInboxItem(items: StudentNotification[], id: string): StudentNotification[] {
+  return items.filter((item) => item.id !== id);
+}
+
 export function formatInboxTime(iso: string, now = new Date()): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
@@ -271,6 +299,7 @@ function localMessage(
     kind,
     ...copy,
     metadata: details,
+    dedupeKey: notificationDedupeKey(kind, details),
     readAt,
     createdAt,
   };
