@@ -135,6 +135,7 @@ export interface UpdateStudentAccountInput {
   bedSpaceId: string;
   rentAmount: number;
   gender?: RoomGender;
+  billingStatus?: Exclude<BillingStatus, "Vacant">;
   manualPayment?: ManualPaymentInput;
 }
 

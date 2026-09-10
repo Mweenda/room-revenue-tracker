@@ -260,6 +260,7 @@ export const studentsRouter = router({
       bedSpaceId: z.string(),
       rentAmount: z.number(),
       gender: roomGender.optional(),
+      billingStatus: occupancyBillingStatus.optional(),
       manualPayment: z.object({
         amount: z.number(),
         submittedAt: z.string(),

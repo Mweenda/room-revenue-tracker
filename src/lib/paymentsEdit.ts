@@ -44,3 +44,20 @@ export function lastVerifiedPayment(
   matches.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
   return matches[0] ?? null;
 }
+
+export function matchesPaymentSearch(
+  payment: Pick<Payment, "studentName" | "bedSpaceId" | "transactionRef">,
+  term: string,
+): boolean {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return true;
+  const bed = payment.bedSpaceId.toLowerCase();
+  const compactNeedle = needle.replace(/[^a-z0-9]/g, "");
+  const compactBed = bed.replace(/[^a-z0-9]/g, "");
+  return (
+    bed.includes(needle) ||
+    (compactNeedle.length > 0 && compactBed.includes(compactNeedle)) ||
+    payment.studentName.toLowerCase().includes(needle) ||
+    payment.transactionRef.toLowerCase().includes(needle)
+  );
+}

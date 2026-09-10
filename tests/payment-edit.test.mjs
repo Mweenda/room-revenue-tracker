@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { applyPaymentEdit, lastVerifiedPayment } = await import('../src/lib/paymentsEdit.ts');
+const { applyPaymentEdit, lastVerifiedPayment, matchesPaymentSearch } = await import('../src/lib/paymentsEdit.ts');
 const { enrichStudentAccounts, deriveStudentAccounts } = await import('../src/lib/students.ts');
 
 const payments = [
@@ -36,6 +36,19 @@ test('last verified payment is the most recent successful one', () => {
   assert.equal(last?.id, 'p3');
   assert.equal(last?.amount, 500);
   assert.equal(last?.submittedAt, '2026-09-01');
+});
+
+test('payment queue search matches block and bed identifiers', () => {
+  const rows = [
+    { studentName: 'Ada Lovelace', bedSpaceId: 'BBH-1-A', transactionRef: 'AIR-1' },
+    { studentName: 'Maika Nengo', bedSpaceId: 'UPV-10-D', transactionRef: 'CASH-1' },
+  ];
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'UPV')).map((row) => row.bedSpaceId), ['UPV-10-D']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'bbh-1-a')).map((row) => row.bedSpaceId), ['BBH-1-A']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'upv10d')).map((row) => row.bedSpaceId), ['UPV-10-D']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'maika')).map((row) => row.bedSpaceId), ['UPV-10-D']);
+  assert.deepEqual(rows.filter((row) => matchesPaymentSearch(row, 'AIR-1')).map((row) => row.bedSpaceId), ['BBH-1-A']);
+  assert.equal(rows.filter((row) => matchesPaymentSearch(row, '  ')).length, 2);
 });
 
 test('student rows expose days past due, last payment and gender', () => {

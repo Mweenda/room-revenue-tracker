@@ -6,7 +6,7 @@ import {
   Settings, LogOut, UserCircle, Camera, EyeOff,
   Bell, Shield, Phone, Mail, MapPin, Calendar,
   Edit3, Save, RefreshCw, HelpCircle, ExternalLink,
-  ChevronDown, Hash, DollarSign, Users, BarChart3, Sun, Moon,
+  ChevronDown, ChevronsLeft, ChevronsRight, Hash, DollarSign, Users, BarChart3, Sun, Moon,
   MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -48,7 +48,7 @@ import { isStudentNativeShell, pinStudentShellLocation, shouldShowWelcomeAd, stu
 import { vacantBedsForGender } from "../lib/studentOnboarding";
 import { compactTitleVisible, headerCollapseProgress } from "../lib/studentPortalHeader";
 import { useStudentViewport } from "../hooks/useStudentViewport";
-import { lastVerifiedPayment } from "../lib/paymentsEdit";
+import { lastVerifiedPayment, matchesPaymentSearch } from "../lib/paymentsEdit";
 import { composeRentReminder, normalizeWhatsAppPhone, whatsappChatUrl } from "../lib/whatsapp";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
@@ -167,10 +167,28 @@ function Field({ label, value, onChange, placeholder, type = "text", disabled }:
 
 // ─── User Menu ───────────────────────────────────────────────────────────────
 
-function UserMenu({ name, role, onLogout, onProfile, onSettings, dark = false, dropUp = true }: {
+const LANDLORD_SIDEBAR_KEY = "rrt-landlord-sidebar-collapsed";
+
+function readLandlordSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(LANDLORD_SIDEBAR_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeLandlordSidebarCollapsed(collapsed: boolean) {
+  try {
+    localStorage.setItem(LANDLORD_SIDEBAR_KEY, collapsed ? "1" : "0");
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+function UserMenu({ name, role, onLogout, onProfile, onSettings, dark = false, dropUp = true, compactDesktop = false }: {
   name: string; role: string; onLogout: () => void;
   onProfile?: () => void; onSettings?: () => void;
-  dark?: boolean; dropUp?: boolean;
+  dark?: boolean; dropUp?: boolean; compactDesktop?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -184,20 +202,21 @@ function UserMenu({ name, role, onLogout, onProfile, onSettings, dark = false, d
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 min-h-[52px] ${dark ? "hover:bg-slate-800 text-white" : "hover:bg-slate-100 text-slate-900"}`}
+        title={name}
+        className={`w-full flex items-center py-2.5 rounded-xl transition-all duration-150 min-h-[52px] ${compactDesktop ? "gap-3 px-3 lg:justify-center lg:px-0 lg:gap-0" : "gap-3 px-3"} ${dark ? "hover:bg-slate-800 text-white" : "hover:bg-slate-100 text-slate-900"}`}
       >
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm">
           {getInitials(name)}
         </div>
-        <div className="flex-1 text-left min-w-0">
+        <div className={`flex-1 text-left min-w-0 ${compactDesktop ? "lg:hidden" : ""}`}>
           <p className={`text-sm font-semibold truncate ${dark ? "text-white" : "text-slate-900"}`}>{name}</p>
           <p className={`text-xs truncate ${dark ? "text-slate-400" : "text-slate-500"}`}>{role}</p>
         </div>
-        <ChevronDown size={14} className={`transition-transform duration-200 ${open ? "rotate-180" : ""} ${dark ? "text-slate-400" : "text-slate-400"}`} />
+        <ChevronDown size={14} className={`transition-transform duration-200 ${open ? "rotate-180" : ""} ${dark ? "text-slate-400" : "text-slate-400"} ${compactDesktop ? "lg:hidden" : ""}`} />
       </button>
 
       {open && (
-        <div className={`absolute ${dropUp ? "bottom-full mb-2" : "top-full mt-2"} left-0 right-0 rounded-xl shadow-2xl border overflow-hidden z-50 ${dark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+        <div className={`absolute ${dropUp ? "bottom-full mb-2" : "top-full mt-2"} ${compactDesktop ? "left-0 right-0 lg:left-full lg:right-auto lg:bottom-0 lg:mb-0 lg:ml-2 lg:w-56" : "left-0 right-0"} rounded-xl shadow-2xl border overflow-hidden z-50 ${dark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
           <div className={`px-4 py-3 border-b ${dark ? "border-slate-700" : "border-slate-100"}`}>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white text-sm font-bold shadow-sm">
@@ -1623,6 +1642,7 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
   initialFilter?: PayStatus | "all";
 }) {
   const [filter, setFilter] = useState<PayStatus | "all">(initialFilter);
+  const [search, setSearch] = useState("");
   const [rejectModal, setRejectModal] = useState<{ id: string } | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [viewReceipt, setViewReceipt] = useState<Payment | null>(null);
@@ -1631,7 +1651,7 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
-  const filtered = payments.filter((p) => filter === "all" || p.status === filter);
+  const filtered = payments.filter((p) => (filter === "all" || p.status === filter) && matchesPaymentSearch(p, search));
   const pendingCount = payments.filter((p) => p.status === "pending").length;
   const verifiedCount = payments.filter((p) => p.status === "verified").length;
   const occupiedBilling = billingRecords.filter((r) => r.billing_status !== "Vacant" && !isVacantName(r.tenant_name));
@@ -1721,6 +1741,18 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
           ))}
         </div>
       }>
+        <div className="px-4 py-3 border-b border-slate-100">
+          <div className="relative sm:max-w-xs">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, BBH, UPV, ref…"
+              className="pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full min-h-[36px]"
+              aria-label="Search payment queue"
+            />
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-slate-50 border-b border-slate-100 text-[11px] text-slate-500 uppercase tracking-wide">
@@ -1759,7 +1791,7 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm">{filter === "pending" ? "No payments awaiting verification." : "No payments in this category."}</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm">{search.trim() ? "No payments match this search." : filter === "pending" ? "No payments awaiting verification." : "No payments in this category."}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -2383,6 +2415,7 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   const now = useLiveDateTime();
   const [view, setView] = useState<LandlordView>("portal");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readLandlordSidebarCollapsed);
   const [inboxRoute, setInboxRoute] = useState<{ kind: LandlordNotificationKind; at: number } | null>(null);
   const billingMonth = BILLING_MONTHS[now.getMonth()];
   const monthBillingRecords = billingRecords;
@@ -2421,39 +2454,66 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
     <div className="flex h-screen bg-slate-50 overflow-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-900 flex flex-col transition-transform duration-250 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-        <div className="px-5 py-5 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl flex items-center justify-center shadow-lg"><Building2 size={17} className="text-white" /></div>
-            <div><p className="text-white font-bold text-sm leading-tight">Room Revenue</p><p className="text-emerald-400 text-xs font-mono">Tracker · {getCurrentYear()}</p></div>
+      <aside
+        data-collapsed={sidebarCollapsed ? "true" : "false"}
+        className={`fixed lg:static lg:shrink-0 inset-y-0 left-0 z-50 bg-slate-900 flex flex-col overflow-visible transition-[width,transform] duration-250 ease-out w-64 ${sidebarCollapsed ? "lg:w-[4.5rem]" : "lg:w-64"} ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+      >
+        <div className={`py-5 border-b border-slate-800 ${sidebarCollapsed ? "px-5 lg:px-2" : "px-5"}`}>
+          <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
+            <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl flex items-center justify-center shadow-lg shrink-0"><Building2 size={17} className="text-white" /></div>
+            <div className={sidebarCollapsed ? "lg:hidden" : ""}><p className="text-white font-bold text-sm leading-tight">Room Revenue</p><p className="text-emerald-400 text-xs font-mono">Tracker · {getCurrentYear()}</p></div>
           </div>
         </div>
 
-        <nav className="px-3 py-4 space-y-0.5 flex-1 overflow-y-auto">
-          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2">Navigation</p>
+        <nav className={`py-4 space-y-0.5 flex-1 overflow-y-auto ${sidebarCollapsed ? "px-3 lg:px-2" : "px-3"}`}>
+          <p className={`text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2 ${sidebarCollapsed ? "lg:hidden" : ""}`}>Navigation</p>
           {MAIN_NAV.map(({ id, label, icon: Icon }) => {
             const badge = id === "pay" ? pendingPay : id === "reports" ? openIssues : id === "revenue" ? overdueCount : 0;
             return (
-              <button key={id} onClick={() => { setView(id); setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${view === id ? "bg-emerald-600 text-white shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
-                <Icon size={16} className="shrink-0 transition-transform duration-150 group-hover:scale-110" />
-                <span className="flex-1 text-left">{label}</span>
-                {badge > 0 && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${view === id ? "bg-white/25 text-white" : id === "revenue" ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>{badge}</span>}
+              <button key={id} type="button" title={label} onClick={() => { setView(id); setSidebarOpen(false); }}
+                className={`w-full flex items-center py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${sidebarCollapsed ? "gap-3 px-4 lg:justify-center lg:px-0 lg:gap-0" : "gap-3 px-4"} ${view === id ? "bg-emerald-600 text-white shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
+                <span className="relative shrink-0">
+                  <Icon size={16} className="transition-transform duration-150 group-hover:scale-110" />
+                  {badge > 0 && sidebarCollapsed && (
+                    <span className={`hidden lg:flex absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 items-center justify-center text-[10px] font-bold rounded-full ${id === "revenue" ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>
+                      {badge > 9 ? "9+" : badge}
+                    </span>
+                  )}
+                </span>
+                <span className={`flex-1 text-left ${sidebarCollapsed ? "lg:hidden" : ""}`}>{label}</span>
+                {badge > 0 && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${sidebarCollapsed ? "lg:hidden" : ""} ${view === id ? "bg-white/25 text-white" : id === "revenue" ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>{badge}</span>}
               </button>
             );
           })}
 
-          <div className="pt-4 pb-1"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2">Account</p></div>
+          <div className={`pt-4 pb-1 ${sidebarCollapsed ? "lg:hidden" : ""}`}><p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2">Account</p></div>
           {BOTTOM_NAV.map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => { setView(id); setSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${view === id ? "bg-slate-700 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
-              <Icon size={16} className="shrink-0" /><span>{label}</span>
+            <button key={id} type="button" title={label} onClick={() => { setView(id); setSidebarOpen(false); }}
+              className={`w-full flex items-center py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${sidebarCollapsed ? "gap-3 px-4 lg:justify-center lg:px-0 lg:gap-0" : "gap-3 px-4"} ${view === id ? "bg-slate-700 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
+              <Icon size={16} className="shrink-0" /><span className={sidebarCollapsed ? "lg:hidden" : ""}>{label}</span>
             </button>
           ))}
         </nav>
 
-        <div className="px-3 pb-4 border-t border-slate-800 pt-3">
-          <UserMenu name={landlord?.name ?? "Property Owner"} role={landlord?.role ?? "Property Owner"} onLogout={onLogout} dark
+        <div className={`pb-3 border-t border-slate-800 pt-3 ${sidebarCollapsed ? "px-3 lg:px-2" : "px-3"}`}>
+          <button
+            type="button"
+            onClick={() => {
+              setSidebarCollapsed((prev) => {
+                const next = !prev;
+                writeLandlordSidebarCollapsed(next);
+                return next;
+              });
+            }}
+            title={sidebarCollapsed ? "Expand menu" : "Collapse menu"}
+            aria-expanded={!sidebarCollapsed}
+            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            className={`hidden lg:flex w-full items-center rounded-xl text-sm font-semibold text-slate-400 hover:bg-slate-800 hover:text-white transition-all duration-150 min-h-[44px] ${sidebarCollapsed ? "justify-center px-0" : "gap-3 px-4 py-2.5"}`}
+          >
+            {sidebarCollapsed ? <ChevronsRight size={16} className="shrink-0" /> : <ChevronsLeft size={16} className="shrink-0" />}
+            <span className={sidebarCollapsed ? "lg:hidden" : ""}>Collapse</span>
+          </button>
+          <UserMenu name={landlord?.name ?? "Property Owner"} role={landlord?.role ?? "Property Owner"} onLogout={onLogout} dark compactDesktop={sidebarCollapsed}
             onProfile={() => { setView("profile"); setSidebarOpen(false); }}
             onSettings={() => { setView("settings"); setSidebarOpen(false); }} />
         </div>

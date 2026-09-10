@@ -1,7 +1,10 @@
 import { dbFn } from "../../server/dbFn";
 import { getSupabase } from "../supabase";
 import { inviteStudentToPortal } from "../auth";
+import { BILLING_MONTHS, getCurrentBillingMonth, type BillingMonth } from "../billing";
+import { occupancyBillingPatch, occupancyCoverageFromBilling } from "../occupancyBillingEdit";
 import type { TenantStatus, UpdateStudentAccountInput } from "../types";
+import { mapBilling } from "./mappers";
 import { recordManualPayment } from "./payments";
 
 export type StudentAccountRow = {
@@ -213,6 +216,47 @@ export async function updateStudentAccount(input: UpdateStudentAccountInput): Pr
       transactionRef: input.manualPayment.transactionRef,
       submittedAt: input.manualPayment.submittedAt,
     });
+  }
+
+  if (input.billingStatus) {
+    const { data: billingRow, error: billingError } = await sb
+      .from("billing_records")
+      .select("*")
+      .eq("billing_id", row.bed_space_id)
+      .single();
+    if (billingError) throw billingError;
+    const billing = mapBilling(billingRow);
+    const coverage = occupancyCoverageFromBilling(billing);
+    const targetMonth = (BILLING_MONTHS as readonly string[]).includes(billing.target_month)
+      ? (billing.target_month as BillingMonth)
+      : getCurrentBillingMonth();
+    const patched = occupancyBillingPatch(billing, {
+      tenantId: input.tenantId,
+      name,
+      phone: input.phone,
+      email: input.email,
+      moveInDate: input.moveInDate,
+      gender: input.gender,
+      bedId: row.bed_space_id,
+      rentAmount: Number(row.rent_amount),
+      billingStatus: input.billingStatus,
+      targetMonth: input.billingStatus === "Paid / Secured" ? coverage.startMonth : targetMonth,
+      monthsCovered: input.billingStatus === "Paid / Secured" ? coverage.monthsCovered : 1,
+      totalBalance: billing.total_balance,
+      paymentDate: "",
+      paymentAmount: 0,
+      paymentMethod: "Cash",
+    });
+    const { error: patchError } = await sb
+      .from("billing_records")
+      .update({
+        total_balance: patched.total_balance,
+        target_month: patched.target_month,
+        days_past_due: patched.days_past_due,
+        current_rent: patched.current_rent,
+      })
+      .eq("billing_id", row.bed_space_id);
+    if (patchError) throw patchError;
   }
 
   return {

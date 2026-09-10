@@ -1,10 +1,11 @@
 import type { StudentAccountRow } from "./api/students";
 import type { BedSpace, BillingRecord, ManualPaymentInput, Payment, TenantStatus, UpdateStudentAccountInput } from "./types";
 import { assertUniqueActivePhone, bedHasTenant, vacantBillingPatch } from "./occupancy";
+import { occupancyBillingPatch, occupancyCoverageFromBilling } from "./occupancyBillingEdit";
 import { lastVerifiedPayment } from "./paymentsEdit";
 import { applyPaymentToLedger } from "./paymentTracking";
 import { rentDueDateIso } from "./rentDue";
-import { getCurrentYear, refreshBillingRecord } from "./billing";
+import { BILLING_MONTHS, getCurrentBillingMonth, getCurrentYear, refreshBillingRecord, type BillingMonth } from "./billing";
 
 /**
  * Builds the Students page rows from in-memory beds and billing, so the page
@@ -159,6 +160,29 @@ export function applyStudentAccountUpdate(
       };
     }
     return record;
+  }).map((record) => {
+    if (!input.billingStatus || record.billing_id !== targetBed.id) return record;
+    const coverage = occupancyCoverageFromBilling(record);
+    const targetMonth = (BILLING_MONTHS as readonly string[]).includes(record.target_month)
+      ? (record.target_month as BillingMonth)
+      : getCurrentBillingMonth();
+    return occupancyBillingPatch(record, {
+      tenantId: input.tenantId,
+      name,
+      phone: student.phone,
+      email: student.email,
+      moveInDate: student.moveInDate,
+      gender,
+      bedId: targetBed.id,
+      rentAmount: input.rentAmount,
+      billingStatus: input.billingStatus,
+      targetMonth: input.billingStatus === "Paid / Secured" ? coverage.startMonth : targetMonth,
+      monthsCovered: input.billingStatus === "Paid / Secured" ? coverage.monthsCovered : 1,
+      totalBalance: record.total_balance,
+      paymentDate: "",
+      paymentAmount: 0,
+      paymentMethod: "Cash",
+    });
   });
 
   return { beds: nextBeds, billingRecords: nextBilling };

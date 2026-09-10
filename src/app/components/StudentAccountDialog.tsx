@@ -10,7 +10,14 @@ import {
 import { buttonStyles, inputStyles } from "./primitives";
 import { formatBedOption } from "../../lib/students";
 import type { StudentAccountRow } from "../../lib/api/students";
-import { PAYMENT_METHODS, type BedSpace, type OnboardStudentInput, type PaymentMethod, type RoomGender, type UpdateStudentAccountInput } from "../../lib/types";
+import { PAYMENT_METHODS, type BedSpace, type BillingStatus, type OnboardStudentInput, type PaymentMethod, type RoomGender, type UpdateStudentAccountInput } from "../../lib/types";
+
+const EDITABLE_BILLING_STATUSES: Exclude<BillingStatus, "Vacant">[] = [
+  "Paid / Secured",
+  "OVERDUE / UNPAID",
+  "Open Window",
+  "Grace Period",
+];
 
 export type StudentFormValues = {
   name: string;
@@ -18,6 +25,7 @@ export type StudentFormValues = {
   email: string;
   nrc: string;
   moveInDate: string;
+  billingStatus: Exclude<BillingStatus, "Vacant">;
   bedSpaceId: string;
   rentAmount: string;
   gender: RoomGender | "";
@@ -31,6 +39,14 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function billingStatusFromRow(row: StudentAccountRow): Exclude<BillingStatus, "Vacant"> {
+  const status = row.billing_status;
+  if (status === "Paid / Secured" || status === "OVERDUE / UNPAID" || status === "Open Window" || status === "Grace Period") {
+    return status;
+  }
+  return "Open Window";
+}
+
 function valuesFromStudent(row: StudentAccountRow): StudentFormValues {
   return {
     name: row.full_name,
@@ -38,6 +54,7 @@ function valuesFromStudent(row: StudentAccountRow): StudentFormValues {
     email: row.email ?? "",
     nrc: row.nrc && row.nrc !== "-" ? row.nrc : "",
     moveInDate: row.move_in_date ?? todayIso(),
+    billingStatus: billingStatusFromRow(row),
     bedSpaceId: row.bed_space_id ?? "",
     rentAmount: row.rent_amount != null ? String(row.rent_amount) : "",
     gender: row.gender ?? row.room_gender ?? "",
@@ -55,6 +72,7 @@ function emptyValues(defaultBedId: string, defaultRent: string): StudentFormValu
     email: "",
     nrc: "",
     moveInDate: todayIso(),
+    billingStatus: "Open Window",
     bedSpaceId: defaultBedId,
     rentAmount: defaultRent,
     gender: "",
@@ -189,6 +207,7 @@ export default function StudentAccountDialog({
           bedSpaceId: form.bedSpaceId,
           rentAmount,
           gender: form.gender || undefined,
+          billingStatus: form.billingStatus,
           manualPayment,
         });
       }
@@ -295,6 +314,23 @@ export default function StudentAccountDialog({
                 required
               />
             </label>
+
+            {mode === "edit" && (
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Status</span>
+                <select
+                  value={form.billingStatus}
+                  onChange={(e) => setField("billingStatus", e.target.value as Exclude<BillingStatus, "Vacant">)}
+                  className={inputStyles}
+                >
+                  {EDITABLE_BILLING_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {status === "OVERDUE / UNPAID" ? "Overdue" : status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label className="space-y-1.5 sm:col-span-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Bed space</span>

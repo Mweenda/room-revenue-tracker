@@ -137,3 +137,19 @@ test('a landlord cash receipt applies to the billing ledger', () => {
   assert.equal(paid.payments[0].method, 'Cash');
   assert.equal(paid.payments[0].amount, 450);
 });
+
+test('editing billing status to paid clears the outstanding balance', () => {
+  const next = applyStudentAccountUpdate(BEDS, BILLING, {
+    tenantId: 't1',
+    name: 'Ada Lovelace',
+    phone: '0970000000',
+    email: 'ada@example.com',
+    moveInDate: '2026-02-01',
+    bedSpaceId: 'BBH-1-A',
+    rentAmount: 900,
+    billingStatus: 'Paid / Secured',
+  });
+  const billing = next.billingRecords.find((record) => record.billing_id === 'BBH-1-A');
+  assert.equal(billing?.billing_status, 'Paid / Secured');
+  assert.equal(billing?.total_balance, 0);
+});

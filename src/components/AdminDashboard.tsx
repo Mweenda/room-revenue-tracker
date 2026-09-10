@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard, Building2, Users, ScrollText, Settings as SettingsIcon, ShieldCheck,
-  LogOut, RefreshCw, Menu,
+  LogOut, RefreshCw, Menu, ChevronsLeft, ChevronsRight,
 } from "lucide-react";
 import { useAdminData } from "../hooks/useAdminData";
 import { fetchPlatformSettings, logAdminLogin } from "../lib/api/admin";
@@ -32,6 +32,13 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
   const data = useAdminData();
   const [section, setSection] = useState<Section>("overview");
   const [navOpen, setNavOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("rrt-admin-sidebar-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [currency, setCurrency] = useState("ZMW");
 
   useEffect(() => { logAdminLogin(); }, []);
@@ -44,15 +51,16 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
   const adminEmail = admin?.email ?? "admin@rrt.io";
   const activeNav = useMemo(() => NAV.find((n) => n.id === section) ?? NAV[0], [section]);
 
-  const NavList = ({ onNavigate }: { onNavigate?: () => void }) => (
+  const NavList = ({ onNavigate, compact = false }: { onNavigate?: () => void; compact?: boolean }) => (
     <nav className="space-y-1">
       {NAV.map((item) => {
         const active = section === item.id;
         const Icon = item.icon;
         return (
-          <button key={item.id} onClick={() => { setSection(item.id); onNavigate?.(); }}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${active ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"}`}>
-            <Icon size={18} /> {item.label}
+          <button key={item.id} type="button" title={item.label} onClick={() => { setSection(item.id); onNavigate?.(); }}
+            className={`w-full flex items-center py-2.5 rounded-xl text-sm font-medium transition-colors min-h-[44px] ${compact ? "justify-center px-0" : "gap-3 px-3.5"} ${active ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"}`}>
+            <Icon size={18} className="shrink-0" />
+            <span className={compact ? "sr-only" : ""}>{item.label}</span>
           </button>
         );
       })}
@@ -62,18 +70,35 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
   return (
     <div className="min-h-dvh bg-slate-50 dark:bg-slate-950 lg:flex">
       {/* Sidebar (desktop) */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-        <div className="flex items-center gap-2.5 px-1.5 mb-6">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-sky-500 flex items-center justify-center shadow-sm"><ShieldCheck size={20} className="text-white" /></div>
-          <div className="leading-tight">
+      <aside className={`hidden lg:flex lg:flex-col lg:shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 transition-[width] duration-250 ease-out ${navCollapsed ? "lg:w-[4.5rem]" : "lg:w-64"}`}>
+        <div className={`flex items-center gap-2.5 mb-6 ${navCollapsed ? "justify-center px-0" : "px-1.5"}`}>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-sky-500 flex items-center justify-center shadow-sm shrink-0"><ShieldCheck size={20} className="text-white" /></div>
+          <div className={`leading-tight ${navCollapsed ? "hidden" : ""}`}>
             <div className="text-sm font-bold text-slate-900 dark:text-slate-100">RRT Admin</div>
             <div className="text-[11px] text-slate-400">Console</div>
           </div>
         </div>
-        <NavList />
-        <div className="mt-auto pt-4">
-          <div className="px-1.5 mb-2 text-xs text-slate-400 truncate">{adminEmail}</div>
-          <button onClick={onLogout} className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"><LogOut size={18} /> Sign out</button>
+        <NavList compact={navCollapsed} />
+        <div className="mt-auto pt-4 space-y-1">
+          <div className={`px-1.5 mb-2 text-xs text-slate-400 truncate ${navCollapsed ? "hidden" : ""}`}>{adminEmail}</div>
+          <button
+            type="button"
+            title={navCollapsed ? "Expand menu" : "Collapse menu"}
+            aria-expanded={!navCollapsed}
+            aria-label={navCollapsed ? "Expand navigation" : "Collapse navigation"}
+            onClick={() => {
+              setNavCollapsed((prev) => {
+                const next = !prev;
+                try { localStorage.setItem("rrt-admin-sidebar-collapsed", next ? "1" : "0"); } catch { /* ignore */ }
+                return next;
+              });
+            }}
+            className={`w-full flex items-center py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[44px] ${navCollapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
+          >
+            {navCollapsed ? <ChevronsRight size={18} className="shrink-0" /> : <ChevronsLeft size={18} className="shrink-0" />}
+            <span className={navCollapsed ? "hidden" : ""}>Collapse</span>
+          </button>
+          <button type="button" title="Sign out" onClick={onLogout} className={`w-full flex items-center py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[44px] ${navCollapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}><LogOut size={18} className="shrink-0" /><span className={navCollapsed ? "hidden" : ""}>Sign out</span></button>
         </div>
       </aside>
 
