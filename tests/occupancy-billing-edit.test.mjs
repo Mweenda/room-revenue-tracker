@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 const {
   applyOccupancyAdminEdit,
   occupancyCoverageFromBilling,
+  occupancyReceiptToEdit,
 } = await import("../src/lib/occupancyBillingEdit.ts");
 
 const TODAY = new Date("2026-09-09T12:00:00.000Z");
@@ -159,4 +160,40 @@ test("prepaid coverage infers how many months are secured from the last prepaid 
   );
   assert.equal(coverage.monthsCovered, 3);
   assert.equal(coverage.startMonth, "Sep");
+});
+
+test("a reused bed records the new occupant's receipt without rewriting the previous tenant's payment", () => {
+  const previous = {
+    id: "p-previous",
+    studentName: "Grace Bwalya",
+    bedSpaceId: "UPV-1-A",
+    amount: 900,
+    method: "Cash",
+    transactionRef: "CASH-20260201",
+    submittedAt: "2026-02-01",
+    status: "verified",
+  };
+  assert.equal(occupancyReceiptToEdit([previous], "UPV-1-A", "Maika Nengo"), null);
+
+  const next = save({
+    paymentDate: "2026-09-05",
+    paymentAmount: 900,
+    paymentRef: "CASH-20260905",
+  }, [previous]);
+  assert.equal(next.paymentAction, "insert");
+  assert.equal(next.payments.length, 2);
+  const prior = next.payments.find((row) => row.id === "p-previous");
+  assert.equal(prior?.studentName, "Grace Bwalya");
+  assert.equal(prior?.submittedAt, "2026-02-01");
+  assert.equal(prior?.amount, 900);
+  const created = next.payments.find((row) => row.id !== "p-previous");
+  assert.equal(created?.studentName, "Maika Nengo");
+  assert.equal(created?.submittedAt, "2026-09-05");
+  assert.equal(created?.status, "verified");
+});
+
+test("occupancy still overwrites the current occupant's own receipt", () => {
+  const own = occupancyReceiptToEdit(PAYMENTS, "UPV-1-A", "Maika Nengo");
+  assert.equal(own?.id, "p-maika-1");
+  assert.equal(occupancyReceiptToEdit(PAYMENTS, "UPV-1-A", "Someone Else"), null);
 });

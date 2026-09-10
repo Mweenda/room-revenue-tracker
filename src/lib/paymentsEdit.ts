@@ -38,8 +38,9 @@ export function lastVerifiedPayment(
   const name = studentName?.trim().toLowerCase();
   const matches = payments.filter((payment) => {
     if (payment.status !== "verified") return false;
-    if (payment.bedSpaceId === bedSpaceId) return true;
-    return Boolean(name && payment.studentName.trim().toLowerCase() === name);
+    const sameStudent = Boolean(name && payment.studentName.trim().toLowerCase() === name);
+    if (payment.bedSpaceId === bedSpaceId) return !name || sameStudent;
+    return sameStudent;
   });
   matches.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
   return matches[0] ?? null;
