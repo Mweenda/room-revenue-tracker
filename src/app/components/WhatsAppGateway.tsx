@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { MessageCircle, Send, X } from "lucide-react";
 import { toast } from "sonner";
-import { buttonStyles, inputStyles } from "./primitives";
+import { buttonStyles, inputStyles, ModalFrame } from "./primitives";
 import { bedLabel } from "../../lib/students";
 import {
   composeRentReminder,
@@ -73,10 +73,8 @@ export default function WhatsAppGateway({
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between">
+        <ModalFrame onClose={() => setOpen(false)} className="max-w-lg">
+          <div className="px-5 py-4 border-b border-white/40 dark:border-white/10 flex items-start justify-between">
               <div>
                 <h3 className="font-bold text-slate-900">WhatsApp gateway</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -147,8 +145,7 @@ export default function WhatsAppGateway({
                     : "Open WhatsApp (last)"}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalFrame>
       )}
     </>
   );

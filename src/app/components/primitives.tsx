@@ -5,12 +5,15 @@ import { Badge as ShadBadge } from "./ui/badge";
 
 /** Shared interactive treatment so every clickable surface reacts the same way. */
 export const HOVER_SURFACE =
-  "transition-all duration-200 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900";
-export const HOVER_ROW = "transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/80";
+  "transition-all duration-200 hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-500 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900";
+export const HOVER_ROW =
+  "transition-colors duration-150 hover:bg-slate-50/90 dark:hover:bg-slate-800/80";
 export const GLASS_PANEL =
   "bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border border-white/50 dark:border-white/10 shadow-2xl";
 export const GLASS_SOFT =
   "bg-white/70 dark:bg-slate-900/65 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-lg";
+export const OVERLAY_SCRIM =
+  "absolute inset-0 bg-slate-950/50 backdrop-blur-sm";
 
 export function Badge({ label, className }: { label: string; className: string }) {
   return (
@@ -31,7 +34,7 @@ export function KpiCard({ label, value, sub, accent, icon: Icon }: {
   icon?: React.ElementType;
 }) {
   return (
-    <Card className={`gap-1 border-slate-200 px-4 py-4 shadow-sm group ${HOVER_SURFACE}`}>
+    <Card className={`gap-1 border-slate-200/80 bg-white/90 backdrop-blur-sm px-4 py-4 shadow-sm group ${HOVER_SURFACE}`}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</span>
         {Icon && <Icon size={16} className="text-slate-300 group-hover:text-slate-400 transition-colors" />}
@@ -49,7 +52,7 @@ export function SectionCard({ title, children, action, className }: {
   className?: string;
 }) {
   return (
-    <Card className={`gap-0 border-slate-200 dark:border-slate-700 dark:bg-slate-900 shadow-sm overflow-hidden py-0 ${HOVER_SURFACE} ${className ?? ""}`}>
+    <Card className={`gap-0 border-slate-200/80 dark:border-slate-700 dark:bg-slate-900/80 bg-white/90 backdrop-blur-sm shadow-sm overflow-hidden py-0 ${HOVER_SURFACE} ${className ?? ""}`}>
       <CardHeader className="flex flex-row items-center justify-between gap-3 px-5 py-4 border-b-[1px] border-slate-100 dark:border-slate-800">
         <CardTitle className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">{title}</CardTitle>
         {action}
@@ -94,18 +97,37 @@ export function NavCard({ title, description, icon: Icon, accent, onClick, foote
 }
 
 const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2";
+  "inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 hover:-translate-y-px";
 
 export const buttonStyles = {
-  primary: `${PRIMARY_BUTTON} bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-sm focus-visible:ring-emerald-500`,
-  danger: `${PRIMARY_BUTTON} bg-red-600 text-white hover:bg-red-700 hover:shadow-sm focus-visible:ring-red-500`,
-  neutral: `${PRIMARY_BUTTON} bg-slate-900 text-white hover:bg-slate-800 hover:shadow-sm focus-visible:ring-slate-500`,
-  outline: `${PRIMARY_BUTTON} border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-400 hover:shadow-sm focus-visible:ring-slate-400`,
-  subtle: `${PRIMARY_BUTTON} bg-slate-100 text-slate-700 hover:bg-slate-200 focus-visible:ring-slate-400`,
+  primary: `${PRIMARY_BUTTON} bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md focus-visible:ring-emerald-500`,
+  danger: `${PRIMARY_BUTTON} bg-red-600 text-white hover:bg-red-700 hover:shadow-md focus-visible:ring-red-500`,
+  neutral: `${PRIMARY_BUTTON} bg-slate-900 text-white hover:bg-slate-800 hover:shadow-md focus-visible:ring-slate-500`,
+  outline: `${PRIMARY_BUTTON} border border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 hover:bg-white hover:border-slate-400 hover:shadow-md focus-visible:ring-slate-400`,
+  subtle: `${PRIMARY_BUTTON} bg-slate-100 text-slate-700 hover:bg-slate-200 hover:shadow-sm focus-visible:ring-slate-400`,
 } as const;
 
 export const inputStyles =
-  "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[40px]";
+  "w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm bg-white/90 dark:bg-slate-800 dark:text-slate-100 shadow-sm transition-all duration-150 hover:border-emerald-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[40px] disabled:bg-slate-50 dark:disabled:bg-slate-800/60 disabled:text-slate-400";
+
+export function ModalFrame({
+  children,
+  onClose,
+  className,
+}: {
+  children: React.ReactNode;
+  onClose?: () => void;
+  className?: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6">
+      <button type="button" className={OVERLAY_SCRIM} aria-label="Close dialog" onClick={onClose} />
+      <div className={`relative w-full ${GLASS_PANEL} rounded-2xl max-h-[min(92dvh,48rem)] overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-200 ${className ?? "max-w-md"}`}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
@@ -126,7 +148,7 @@ export function StatusBanner({ tone, children }: {
     info: "bg-slate-50 border-slate-200 text-slate-700",
   } as const;
   return (
-    <div role="status" className={`rounded-xl border px-4 py-3 text-sm ${styles[tone]}`}>
+    <div role="status" className={`rounded-xl border px-4 py-3 text-sm shadow-sm backdrop-blur-sm ${styles[tone]}`}>
       {children}
     </div>
   );

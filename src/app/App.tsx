@@ -27,7 +27,7 @@ import { adminSignOut, changeStudentPassword, linkTenantToAuthUser, signOutStude
 import { ColorModeProvider, ColorModeRoot, useColorMode } from "../lib/colorMode";
 import { getSupabase } from "../lib/supabase";
 import { Toaster } from "./components/ui/sonner";
-import { Badge, KpiCard, SectionCard, StatusBanner, GLASS_SOFT } from "./components/primitives";
+import { Badge, KpiCard, SectionCard, StatusBanner, GLASS_SOFT, ModalFrame, inputStyles, buttonStyles, HOVER_ROW } from "./components/primitives";
 import SpreadsheetPaymentBoard from "./components/SpreadsheetPaymentBoard";
 import StudentsView from "./views/StudentsView";
 import ReportsView from "./views/ReportsView";
@@ -141,7 +141,7 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 ${checked ? "bg-emerald-600" : "bg-slate-200 dark:bg-slate-600"}`}
+      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-all duration-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 ${checked ? "bg-emerald-600" : "bg-slate-200 dark:bg-slate-600"}`}
     >
       <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-white shadow transform transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
     </button>
@@ -158,7 +158,7 @@ function Field({ label, value, onChange, placeholder, type = "text", disabled }:
       <input
         type={isPassword && visible ? "text" : type} value={value} onChange={(e) => onChange?.(e.target.value)} placeholder={placeholder}
         disabled={disabled}
-        className={`w-full border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all min-h-[44px] disabled:bg-slate-50 dark:disabled:bg-slate-800/60 disabled:text-slate-400 ${isPassword ? "pr-11" : ""}`}
+        className={`${inputStyles} ${isPassword ? "pr-11" : ""}`}
       />
       {isPassword && <button type="button" onClick={() => setVisible((current) => !current)} aria-label={visible ? `Hide ${label}` : `Show ${label}`} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"><>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</></button>}
       </div>
@@ -1082,14 +1082,14 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1 sm:max-w-xs">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, ID, phone…" className="pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full min-h-[36px]" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, ID, phone…" className={`${inputStyles} pl-8 text-xs`} />
               </div>
               {[
                 { value: filterBlock, onChange: (v: string) => setFilterBlock(v as BlockCode | "ALL"), options: [["ALL","All Blocks"], ...blocks.map((code) => [code, code] as [string, string])] },
                 { value: filterStatus, onChange: (v: string) => setFilterStatus(v as BillingStatus | "ALL"), options: [["ALL","All Statuses"],["Open Window","Open Window"],["Paid / Secured","Paid"],["OVERDUE / UNPAID","Overdue"],["Vacant","Vacant"],["Grace Period","Grace Period"]] },
                 { value: filterGender, onChange: (v: string) => setFilterGender(v as "All" | "Male" | "Female"), options: [["All","All Genders"],["Male","Male"],["Female","Female"]] },
               ].map((sel, i) => (
-                <select key={i} value={sel.value} onChange={(e) => sel.onChange(e.target.value)} className="border border-slate-200 rounded-lg px-2.5 py-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[36px]">
+                <select key={i} value={sel.value} onChange={(e) => sel.onChange(e.target.value)} className={inputStyles}>
                   {sel.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               ))}
@@ -1333,10 +1333,8 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
         const s = billingStatusStyle[br?.billing_status ?? "Vacant"];
         const lastPay = lastPayByBed.get(drawerBed.id);
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeDrawer} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
-              <div className="bg-slate-900 px-6 py-5 flex items-start justify-between shrink-0">
+          <ModalFrame onClose={closeDrawer} className="max-w-md">
+              <div className="bg-slate-900/95 backdrop-blur-md px-6 py-5 flex items-start justify-between shrink-0">
                 <div>
                   <span className="text-xs font-mono text-emerald-400 uppercase tracking-wider">{drawerBed.identifier}</span>
                   <p className="text-white font-bold text-lg mt-1">{displayOptional(drawerBed.student?.name)}</p>
@@ -1383,19 +1381,19 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                       <div className="bg-slate-50 rounded-xl p-4 space-y-3">
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
-                          <input type="text" value={occupancyForm.name} onChange={(e) => setOccupancyForm({ ...occupancyForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                          <input type="text" value={occupancyForm.name} onChange={(e) => setOccupancyForm({ ...occupancyForm, name: e.target.value })} className={inputStyles} />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
-                          <input type="text" value={occupancyForm.phone} onChange={(e) => setOccupancyForm({ ...occupancyForm, phone: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                          <input type="text" value={occupancyForm.phone} onChange={(e) => setOccupancyForm({ ...occupancyForm, phone: e.target.value })} className={inputStyles} />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
-                          <input type="email" value={occupancyForm.email} onChange={(e) => setOccupancyForm({ ...occupancyForm, email: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                          <input type="email" value={occupancyForm.email} onChange={(e) => setOccupancyForm({ ...occupancyForm, email: e.target.value })} className={inputStyles} />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Gender</label>
-                          <select value={occupancyForm.gender ?? ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, gender: e.target.value as RoomGender | undefined })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                          <select value={occupancyForm.gender ?? ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, gender: e.target.value as RoomGender | undefined })} className={inputStyles}>
                             <option value="">Select gender</option>
                             <option value="Male">Male</option>
                             <option value="Female">Female</option>
@@ -1403,11 +1401,11 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Move-in Date</label>
-                          <input type="date" value={occupancyForm.moveInDate} onChange={(e) => setOccupancyForm({ ...occupancyForm, moveInDate: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                          <input type="date" value={occupancyForm.moveInDate} onChange={(e) => setOccupancyForm({ ...occupancyForm, moveInDate: e.target.value })} className={inputStyles} />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Monthly Rent</label>
-                          <input type="number" min="1" value={occupancyForm.rentAmount || ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, rentAmount: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                          <input type="number" min="1" value={occupancyForm.rentAmount || ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, rentAmount: Number(e.target.value) })} className={inputStyles} />
                         </div>
                         <div className="flex gap-2 pt-2">
                           <button onClick={() => { setEditMode(false); setShowVacateConfirm(false); setDrawerError(null); setOccupancyForm(null); }} disabled={saving || vacating} className="flex-1 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50">Cancel</button>
@@ -1472,7 +1470,7 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                                     totalBalance: billingStatus === "Paid / Secured" ? 0 : (occupancyForm.totalBalance ?? occupancyForm.rentAmount),
                                   });
                                 }}
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                                className={inputStyles}
                               >
                                 <option value="Paid / Secured">Paid / Secured</option>
                                 <option value="OVERDUE / UNPAID">Overdue</option>
@@ -1485,7 +1483,7 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                               <select
                                 value={occupancyForm.targetMonth}
                                 onChange={(e) => setOccupancyForm({ ...occupancyForm, targetMonth: e.target.value as OccupancyAdminEditInput["targetMonth"] })}
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                                className={inputStyles}
                               >
                                 {BILLING_MONTHS.map((month) => <option key={month} value={month}>{month}</option>)}
                               </select>
@@ -1493,7 +1491,7 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                             {occupancyForm.billingStatus !== "Paid / Secured" && (
                               <div>
                                 <label className="block text-xs font-medium text-slate-600 mb-1">Balance</label>
-                                <input type="number" min="0" value={occupancyForm.totalBalance ?? ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, totalBalance: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
+                                <input type="number" min="0" value={occupancyForm.totalBalance ?? ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, totalBalance: Number(e.target.value) })} className={inputStyles} />
                               </div>
                             )}
                             {occupancyForm.billingStatus === "Paid / Secured" && (
@@ -1504,23 +1502,23 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                                   <button type="button" onClick={() => setOccupancyForm({ ...occupancyForm, monthsCovered: Math.max(2, occupancyForm.monthsCovered) })} className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold border ${occupancyForm.monthsCovered > 1 ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"}`}>Multiple months</button>
                                 </div>
                                 {occupancyForm.monthsCovered > 1 && (
-                                  <input type="number" min={2} max={12} value={occupancyForm.monthsCovered} onChange={(e) => setOccupancyForm({ ...occupancyForm, monthsCovered: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
+                                  <input type="number" min={2} max={12} value={occupancyForm.monthsCovered} onChange={(e) => setOccupancyForm({ ...occupancyForm, monthsCovered: Number(e.target.value) })} className={inputStyles} />
                                 )}
                                 <p className="text-[11px] text-slate-500 mt-1.5">Secured through {addBillingMonths(occupancyForm.targetMonth, Math.max(1, occupancyForm.monthsCovered) - 1)}.</p>
                               </div>
                             )}
                             <div>
                               <label className="block text-xs font-medium text-slate-600 mb-1">Payment received</label>
-                              <input type="date" value={occupancyForm.paymentDate} onChange={(e) => setOccupancyForm({ ...occupancyForm, paymentDate: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
+                              <input type="date" value={occupancyForm.paymentDate} onChange={(e) => setOccupancyForm({ ...occupancyForm, paymentDate: e.target.value })} className={inputStyles} />
                               <p className="text-[11px] text-slate-500 mt-1.5">{lastPay ? "Saving updates this receipt. It will not add a second payment." : "Add a date and amount to record the receipt."}</p>
                             </div>
                             <div>
                               <label className="block text-xs font-medium text-slate-600 mb-1">Payment amount</label>
-                              <input type="number" min="0" value={occupancyForm.paymentAmount || ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, paymentAmount: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white" />
+                              <input type="number" min="0" value={occupancyForm.paymentAmount || ""} onChange={(e) => setOccupancyForm({ ...occupancyForm, paymentAmount: Number(e.target.value) })} className={inputStyles} />
                             </div>
                             <div>
                               <label className="block text-xs font-medium text-slate-600 mb-1">Payment method</label>
-                              <select value={occupancyForm.paymentMethod} onChange={(e) => setOccupancyForm({ ...occupancyForm, paymentMethod: e.target.value as PaymentMethod })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                              <select value={occupancyForm.paymentMethod} onChange={(e) => setOccupancyForm({ ...occupancyForm, paymentMethod: e.target.value as PaymentMethod })} className={inputStyles}>
                                 {PAYMENT_METHODS.map((method) => <option key={method} value={method}>{method}</option>)}
                               </select>
                             </div>
@@ -1549,22 +1547,19 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                     <Home size={36} className="mx-auto mb-3 opacity-30" />
                     <p className="text-sm">This bed space is currently unoccupied.</p>
                     <button onClick={() => { setDrawerBed(null); setShowOnboard(true); setForm((f) => ({ ...f, bedId: drawerBed.id, gender: drawerBed.roomGender ?? f.gender })); }}
-                      className="mt-4 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors">
+                      className={`${buttonStyles.primary} mt-4`}>
                       Assign Tenant
                     </button>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+          </ModalFrame>
         );
       })()}
 
       {showOnboard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowOnboard(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="bg-slate-900 px-6 py-5 flex items-center justify-between">
+        <ModalFrame onClose={() => setShowOnboard(false)} className="max-w-md">
+            <div className="bg-slate-900/95 backdrop-blur-md px-6 py-5 flex items-center justify-between">
               <div><p className="text-xs text-emerald-400 font-semibold uppercase tracking-wider">Tenant Onboarding</p><h2 className="text-white font-bold text-lg">Assign New Tenant</h2></div>
               <button onClick={() => setShowOnboard(false)} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
             </div>
@@ -1589,7 +1584,7 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                         bedId: matching.some((bed) => bed.id === f.bedId) ? f.bedId : (matching[0]?.id ?? ""),
                       }));
                     }}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px]"
+                    className={inputStyles}
                   >
                     <option value="">Select gender…</option>
                     <option value="Male">Male</option>
@@ -1603,21 +1598,20 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                     const bed = beds.find((row) => row.id === bedId);
                     setForm((f) => ({ ...f, bedId, gender: bed?.roomGender ?? f.gender }));
                   }}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[44px]">
+                    className={`${inputStyles} font-mono`}>
                     <option value="">Select available bed space…</option>
                     {assignableBeds.map((b) => <option key={b.id} value={b.id}>{b.id} · {b.roomGender ?? "—"} · K{b.rentAmount}</option>)}
                   </select>
                 </div>
                 <Field label="Move-in Date" value={form.moveInDate} onChange={(v) => setForm((f) => ({ ...f, moveInDate: v }))} type="date" />
                 <button onClick={handleOnboard} disabled={!form.name || !form.bedId || !form.email || !form.gender}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl font-semibold text-sm transition-all duration-150 hover:shadow-md">
+                  className={`${buttonStyles.primary} w-full`}>
                   Onboard Tenant
                 </button>
                 <p className="text-xs text-slate-500 text-center">We’ll email them a link to create a password and open their student portal.</p>
               </div>
             )}
-          </div>
-        </div>
+        </ModalFrame>
       )}
     </div>
   );
@@ -1749,7 +1743,7 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search student, bed, method, ref, amount, date, status…"
-              className="pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full min-h-[36px]"
+              className={`${inputStyles} pl-8`}
               aria-label="Search payment queue"
             />
           </div>
@@ -1770,7 +1764,7 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50 transition-colors duration-150 group">
+                <tr key={p.id} className={`${HOVER_ROW} group`}>
                   <td className="px-4 py-3.5 font-semibold text-slate-900 max-w-[140px]"><span className="truncate block">{p.studentName}</span></td>
                   <td className="px-4 py-3.5 font-mono text-xs text-slate-600">{p.bedSpaceId}</td>
                   <td className="px-3 py-3.5"><span className={`px-2 py-0.5 rounded text-xs font-bold ${p.method === "Airtel" ? "bg-red-100 text-red-700" : p.method === "MTN" ? "bg-yellow-100 text-yellow-700" : "bg-slate-100 text-slate-700"}`}>{p.method}</span></td>
@@ -1799,10 +1793,9 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
       </SectionCard>
 
       {viewReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setViewReceipt(null)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full space-y-4">
-            <div className="flex items-center justify-between"><h3 className="font-bold text-slate-900">Payment Receipt</h3><button onClick={() => setViewReceipt(null)}><X size={18} className="text-slate-500" /></button></div>
+        <ModalFrame onClose={() => setViewReceipt(null)} className="max-w-sm">
+          <div className="p-6 space-y-4 overflow-y-auto">
+            <div className="flex items-center justify-between"><h3 className="font-bold text-slate-900">Payment Receipt</h3><button type="button" onClick={() => setViewReceipt(null)} className="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white/60"><X size={18} /></button></div>
             <div className="bg-slate-100 rounded-xl h-40 flex items-center justify-center overflow-hidden">
               {viewReceipt.proofUrl
                 ? <img src={viewReceipt.proofUrl} alt="Payment proof" className="w-full h-full object-contain" />
@@ -1816,44 +1809,42 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
               <InfoRow label="Submitted" value={viewReceipt.submittedAt} />
             </div>
           </div>
-        </div>
+        </ModalFrame>
       )}
 
       {rejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setRejectModal(null)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full space-y-4">
+        <ModalFrame onClose={() => setRejectModal(null)} className="max-w-sm">
+          <div className="p-6 space-y-4 overflow-y-auto">
             <h3 className="font-bold text-slate-900">Reject Payment</h3>
             <p className="text-sm text-slate-500">Provide a reason — the student will be notified to resubmit.</p>
-            <textarea rows={3} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="e.g. Reference code does not match our records…" className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+            <textarea rows={3} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="e.g. Reference code does not match our records…" className={`${inputStyles} resize-none`} />
             <div className="flex gap-3">
-              <button onClick={() => setRejectModal(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
-              <button onClick={reject} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition-colors">Reject</button>
+              <button onClick={() => setRejectModal(null)} className={`${buttonStyles.outline} flex-1`}>Cancel</button>
+              <button onClick={reject} className={`${buttonStyles.danger} flex-1`}>Reject</button>
             </div>
           </div>
-        </div>
+        </ModalFrame>
       )}
 
       {editTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setEditTarget(null)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full space-y-4">
+        <ModalFrame onClose={() => setEditTarget(null)} className="max-w-md">
+          <div className="p-6 space-y-4 overflow-y-auto">
             <h3 className="font-bold text-slate-900">Edit payment</h3>
             <p className="text-sm text-slate-500">Manually correct amount, method, reference, date, or the assigned bed.</p>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Student
-              <input value={editForm.studentName} onChange={(e) => setEditForm((f) => ({ ...f, studentName: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+              <input value={editForm.studentName} onChange={(e) => setEditForm((f) => ({ ...f, studentName: e.target.value }))} className={`${inputStyles} mt-1.5`} />
             </label>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Bed space
-              <select value={editForm.bedSpaceId} onChange={(e) => setEditForm((f) => ({ ...f, bedSpaceId: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white">
+              <select value={editForm.bedSpaceId} onChange={(e) => setEditForm((f) => ({ ...f, bedSpaceId: e.target.value }))} className={`${inputStyles} mt-1.5`}>
                 {beds.map((bed) => <option key={bed.id} value={bed.id}>{bed.id}{bed.student ? ` · ${bed.student.name}` : ""}</option>)}
               </select>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Amount (K)
-                <input type="number" min="1" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+                <input type="number" min="1" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} className={`${inputStyles} mt-1.5`} />
               </label>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Method
-                <select value={editForm.method} onChange={(e) => setEditForm((f) => ({ ...f, method: e.target.value as PaymentMethod }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white">
+                <select value={editForm.method} onChange={(e) => setEditForm((f) => ({ ...f, method: e.target.value as PaymentMethod }))} className={`${inputStyles} mt-1.5`}>
                   <option>Airtel</option>
                   <option>MTN</option>
                   <option>Cash</option>
@@ -1861,18 +1852,18 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
               </label>
             </div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Reference
-              <input value={editForm.transactionRef} onChange={(e) => setEditForm((f) => ({ ...f, transactionRef: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+              <input value={editForm.transactionRef} onChange={(e) => setEditForm((f) => ({ ...f, transactionRef: e.target.value }))} className={`${inputStyles} mt-1.5`} />
             </label>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Date
-              <input type="date" value={editForm.submittedAt} onChange={(e) => setEditForm((f) => ({ ...f, submittedAt: e.target.value }))} className="mt-1.5 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+              <input type="date" value={editForm.submittedAt} onChange={(e) => setEditForm((f) => ({ ...f, submittedAt: e.target.value }))} className={`${inputStyles} mt-1.5`} />
             </label>
-            {editError && <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{editError}</p>}
+            {editError && <p className="text-sm text-red-700 bg-red-50/80 border border-red-100 rounded-xl px-4 py-3">{editError}</p>}
             <div className="flex gap-3">
-              <button onClick={() => setEditTarget(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
-              <button onClick={() => void saveEdit()} disabled={editSaving} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50">{editSaving ? "Saving…" : "Save changes"}</button>
+              <button onClick={() => setEditTarget(null)} className={`${buttonStyles.outline} flex-1`}>Cancel</button>
+              <button onClick={() => void saveEdit()} disabled={editSaving} className={`${buttonStyles.primary} flex-1`}>{editSaving ? "Saving…" : "Save changes"}</button>
             </div>
           </div>
-        </div>
+        </ModalFrame>
       )}
     </div>
   );

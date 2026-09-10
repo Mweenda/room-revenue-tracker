@@ -73,7 +73,7 @@ export function Modal({ title, subtitle, onClose, children, maxWidth = "max-w-lg
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative z-10 w-full ${maxWidth} max-h-[min(92dvh,44rem)] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700`}>
+      <div className={`relative z-10 w-full ${maxWidth} max-h-[min(92dvh,44rem)] overflow-y-auto rounded-2xl bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl border border-white/50 dark:border-white/10`}>
         <div className="sticky top-0 flex items-start justify-between gap-4 px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
           <div className="min-w-0">
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">{title}</h3>
@@ -90,6 +90,6 @@ export function Modal({ title, subtitle, onClose, children, maxWidth = "max-w-lg
 }
 
 export const adminInput =
-  "w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent";
+  "w-full px-3.5 py-2.5 bg-white/90 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 shadow-sm transition-all duration-150 hover:border-indigo-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent";
 
 export const adminLabel = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5";

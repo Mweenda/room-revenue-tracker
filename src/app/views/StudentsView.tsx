@@ -37,6 +37,7 @@ import {
   buttonStyles,
   inputStyles,
   HOVER_ROW,
+  ModalFrame,
 } from "../components/primitives";
 import RentIncrementDialog, { type ApplyRentIncrementResult } from "../components/RentIncrementDialog";
 import StudentAccountDialog from "../components/StudentAccountDialog";
@@ -489,10 +490,8 @@ export default function StudentsView({
       />
 
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDetail(null)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="bg-slate-900 px-6 py-5 flex items-start justify-between">
+        <ModalFrame onClose={() => setDetail(null)} className="max-w-md">
+          <div className="bg-slate-900/95 backdrop-blur-md px-6 py-5 flex items-start justify-between">
               <div>
                 <p className="text-xs font-mono text-emerald-400 uppercase tracking-wider">{bedLabel(detail)}</p>
                 <h3 className="text-white font-bold text-base mt-0.5">{detail.full_name}</h3>
@@ -564,8 +563,7 @@ export default function StudentsView({
                 </>
               )}
             </div>
-          </div>
-        </div>
+        </ModalFrame>
       )}
 
       <AlertDialog open={Boolean(evictTarget)} onOpenChange={(open) => { if (!open) setEvictTarget(null); }}>

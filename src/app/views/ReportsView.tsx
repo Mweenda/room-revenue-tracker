@@ -21,6 +21,7 @@ import {
   SectionCard,
   buttonStyles,
   inputStyles,
+  ModalFrame,
 } from "../components/primitives";
 import {
   billingMonthOptions,
@@ -500,10 +501,8 @@ function MaintenanceReports({ issues, updateIssueStatus }: {
       </SectionCard>
 
       {viewIssue && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setViewIssue(null); setEditMode(false); }} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="bg-slate-900 px-6 py-5 flex items-start justify-between shrink-0">
+        <ModalFrame onClose={() => { setViewIssue(null); setEditMode(false); }} className="max-w-lg">
+          <div className="bg-slate-900/95 backdrop-blur-md px-6 py-5 flex items-start justify-between shrink-0">
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-lg">{categoryIcon[viewIssue.category]}</span>
@@ -599,8 +598,7 @@ function MaintenanceReports({ issues, updateIssueStatus }: {
                 </>
               )}
             </div>
-          </div>
-        </div>
+        </ModalFrame>
       )}
     </>
   );
