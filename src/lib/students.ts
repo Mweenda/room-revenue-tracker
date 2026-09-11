@@ -76,6 +76,57 @@ export function formatBedOption(bed: BedSpace): string {
 }
 
 /**
+ * The student edit form always posts the Status dropdown, even when the landlord
+ * is only recording a cash receipt. Occupancy status patches treat a zero
+ * balance as "charge a month of rent" for Overdue / Open Window / Grace, so
+ * applying that stale status after `record_manual_payment` has already zeroed
+ * the ledger would silently reopen the debt.
+ */
+export function shouldApplyStudentBillingStatus(
+  input: Pick<UpdateStudentAccountInput, "billingStatus" | "manualPayment">,
+): boolean {
+  if (!input.billingStatus) return false;
+  return !(Number(input.manualPayment?.amount) > 0);
+}
+
+export function applyStudentAccountBillingStatus(
+  record: BillingRecord,
+  input: UpdateStudentAccountInput,
+  extras: {
+    name: string;
+    phone: string;
+    email: string;
+    moveInDate: string;
+    gender?: UpdateStudentAccountInput["gender"];
+    rentAmount: number;
+    bedId: string;
+  },
+): BillingRecord {
+  if (!input.billingStatus) return record;
+  const coverage = occupancyCoverageFromBilling(record);
+  const targetMonth = (BILLING_MONTHS as readonly string[]).includes(record.target_month)
+    ? (record.target_month as BillingMonth)
+    : getCurrentBillingMonth();
+  return occupancyBillingPatch(record, {
+    tenantId: input.tenantId,
+    name: extras.name,
+    phone: extras.phone,
+    email: extras.email,
+    moveInDate: extras.moveInDate,
+    gender: extras.gender,
+    bedId: extras.bedId,
+    rentAmount: extras.rentAmount,
+    billingStatus: input.billingStatus,
+    targetMonth: input.billingStatus === "Paid / Secured" ? coverage.startMonth : targetMonth,
+    monthsCovered: input.billingStatus === "Paid / Secured" ? coverage.monthsCovered : 1,
+    totalBalance: record.total_balance,
+    paymentDate: "",
+    paymentAmount: 0,
+    paymentMethod: "Cash",
+  });
+}
+
+/**
  * Offline counterpart of `update_tenant`: moves the student, updates rent, and
  * carries outstanding billing onto the new bed.
  */
@@ -161,27 +212,15 @@ export function applyStudentAccountUpdate(
     }
     return record;
   }).map((record) => {
-    if (!input.billingStatus || record.billing_id !== targetBed.id) return record;
-    const coverage = occupancyCoverageFromBilling(record);
-    const targetMonth = (BILLING_MONTHS as readonly string[]).includes(record.target_month)
-      ? (record.target_month as BillingMonth)
-      : getCurrentBillingMonth();
-    return occupancyBillingPatch(record, {
-      tenantId: input.tenantId,
+    if (!shouldApplyStudentBillingStatus(input) || record.billing_id !== targetBed.id) return record;
+    return applyStudentAccountBillingStatus(record, input, {
       name,
       phone: student.phone,
       email: student.email,
       moveInDate: student.moveInDate,
       gender,
-      bedId: targetBed.id,
       rentAmount: input.rentAmount,
-      billingStatus: input.billingStatus,
-      targetMonth: input.billingStatus === "Paid / Secured" ? coverage.startMonth : targetMonth,
-      monthsCovered: input.billingStatus === "Paid / Secured" ? coverage.monthsCovered : 1,
-      totalBalance: record.total_balance,
-      paymentDate: "",
-      paymentAmount: 0,
-      paymentMethod: "Cash",
+      bedId: targetBed.id,
     });
   });
 
