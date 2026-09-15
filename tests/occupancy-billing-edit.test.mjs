@@ -5,6 +5,7 @@ const {
   applyOccupancyAdminEdit,
   occupancyCoverageFromBilling,
 } = await import("../src/lib/occupancyBillingEdit.ts");
+const { applyPaymentToLedger } = await import("../src/lib/paymentTracking.ts");
 
 const TODAY = new Date("2026-09-09T12:00:00.000Z");
 
@@ -150,6 +151,24 @@ test("a bed with no receipt can record one verified payment without duplicating 
   assert.equal(corrected.payments.length, 1);
   assert.equal(corrected.payments[0].id, created.payments[0].id);
   assert.equal(corrected.payments[0].submittedAt, "2026-09-03");
+});
+
+test("a new verified receipt applied after occupancy already zeroed the ledger would prepaid extra months", () => {
+  const created = save({ monthsCovered: 3, paymentAmount: 2700, paymentDate: "2026-09-05" }, []);
+  const billing = created.billingRecords.find((row) => row.billing_id === "UPV-1-A");
+  assert.equal(billing?.total_balance, 0);
+  assert.equal(billing?.target_month, "Nov");
+
+  const afterTrigger = applyPaymentToLedger({
+    totalBalance: billing.total_balance,
+    currentRent: billing.current_rent,
+    targetMonth: billing.target_month,
+    amount: 2700,
+    currentMonth: "Sep",
+  });
+  assert.equal(afterTrigger.totalBalance, 0);
+  assert.equal(afterTrigger.targetMonth, "Feb");
+  assert.notEqual(afterTrigger.targetMonth, billing.target_month);
 });
 
 test("prepaid coverage infers how many months are secured from the last prepaid month", () => {
