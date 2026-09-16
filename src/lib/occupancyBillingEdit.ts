@@ -71,6 +71,7 @@ export function occupancyEditDefaults(
   const status = billing?.billing_status === "Vacant" || !billing?.billing_status
     ? "Open Window"
     : billing.billing_status;
+  const receipt = lastPay?.bedSpaceId === bed.id ? lastPay : null;
   return {
     tenantId: bed.student?.id ?? "",
     name: bed.student?.name ?? "",
@@ -84,10 +85,10 @@ export function occupancyEditDefaults(
     targetMonth: coverage.startMonth,
     monthsCovered: coverage.monthsCovered,
     totalBalance: billing?.total_balance,
-    paymentDate: lastPay?.submittedAt ?? "",
-    paymentAmount: lastPay?.amount ?? 0,
-    paymentMethod: lastPay?.method ?? "Cash",
-    paymentRef: lastPay?.transactionRef,
+    paymentDate: receipt?.submittedAt ?? "",
+    paymentAmount: receipt?.amount ?? 0,
+    paymentMethod: receipt?.method ?? "Cash",
+    paymentRef: receipt?.transactionRef,
   };
 }
 
@@ -169,19 +170,20 @@ function occupancyPaymentOverride(
     throw new Error("Choose Airtel, MTN, or Cash");
   }
 
-  if (lastPayment) {
+  const existing = lastPayment?.bedSpaceId === input.bedId ? lastPayment : null;
+  if (existing) {
     if (!hasDate) return { action: "none", payment: null };
-    const nextAmount = amount > 0 ? amount : lastPayment.amount;
+    const nextAmount = amount > 0 ? amount : existing.amount;
     if (!(nextAmount > 0)) throw new Error("Payment amount must be greater than zero");
     return {
       action: "update",
       payment: {
-        ...lastPayment,
+        ...existing,
         amount: nextAmount,
         method,
-        transactionRef: input.paymentRef?.trim() || lastPayment.transactionRef,
+        transactionRef: input.paymentRef?.trim() || existing.transactionRef,
         submittedAt: date,
-        studentName: input.name.trim() || lastPayment.studentName,
+        studentName: input.name.trim() || existing.studentName,
         bedSpaceId: input.bedId,
       },
     };

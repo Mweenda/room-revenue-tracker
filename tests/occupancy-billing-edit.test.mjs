@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 const {
   applyOccupancyAdminEdit,
   occupancyCoverageFromBilling,
+  occupancyEditDefaults,
 } = await import("../src/lib/occupancyBillingEdit.ts");
+const { lastVerifiedPayment } = await import("../src/lib/paymentsEdit.ts");
 
 const TODAY = new Date("2026-09-09T12:00:00.000Z");
 
@@ -159,4 +161,36 @@ test("prepaid coverage infers how many months are secured from the last prepaid 
   );
   assert.equal(coverage.monthsCovered, 3);
   assert.equal(coverage.startMonth, "Sep");
+});
+
+test("moving a student does not treat their previous bed's receipt as this bed's occupancy payment", () => {
+  const previousReceipt = {
+    id: "p-maika-upv-old",
+    studentName: "Maika Nengo",
+    bedSpaceId: "UPV-2-C",
+    amount: 900,
+    method: "Cash",
+    transactionRef: "CASH-20260801",
+    submittedAt: "2026-08-01",
+    status: "verified",
+  };
+  const allPayments = [previousReceipt];
+  assert.equal(lastVerifiedPayment(allPayments, "UPV-1-A", "Maika Nengo"), null);
+
+  const defaults = occupancyEditDefaults(BEDS[0], BILLING[0], previousReceipt, "Sep");
+  assert.equal(defaults.paymentDate, "");
+  assert.equal(defaults.paymentAmount, 0);
+
+  const next = applyOccupancyAdminEdit(BEDS, BILLING, allPayments, {
+    ...defaults,
+    tenantId: "t-maika",
+    monthsCovered: 1,
+  }, { today: TODAY, currentMonth: "Sep" });
+
+  assert.equal(next.paymentAction, "none");
+  assert.equal(next.payments.length, 1);
+  assert.equal(next.payments[0].id, "p-maika-upv-old");
+  assert.equal(next.payments[0].bedSpaceId, "UPV-2-C");
+  assert.equal(next.payments[0].submittedAt, "2026-08-01");
+  assert.equal(next.payments[0].amount, 900);
 });
