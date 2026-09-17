@@ -53,6 +53,58 @@ export function vacantBillingPatch(): Pick<
   };
 }
 
+export type OccupancyBillingCarry = Pick<
+  BillingRecord,
+  "total_balance" | "accumulated_total" | "days_past_due" | "target_month"
+>;
+
+/**
+ * Outstanding ledger that must follow a tenant onto a new bed.
+ * Mirrors `update_tenant` / `complete_student_onboarding` so a bed change
+ * cannot zero the old occupancy row and leave the new bed at a vacant 0 balance.
+ */
+export function occupancyBillingCarry(
+  record?: OccupancyBillingCarry | null,
+): OccupancyBillingCarry {
+  const target = (record?.target_month ?? "").trim();
+  return {
+    total_balance: Number(record?.total_balance ?? 0),
+    accumulated_total: Number(record?.accumulated_total ?? 0),
+    days_past_due: Number(record?.days_past_due ?? 0),
+    target_month: target === "" ? "-" : target,
+  };
+}
+
+/**
+ * Client counterpart of `complete_student_onboarding` when an already-assigned
+ * student picks a different vacant bed during invite setup.
+ */
+export function applyOnboardingBedMove(
+  oldBilling: BillingRecord,
+  newBilling: BillingRecord,
+  tenant: { name: string; phone: string; moveInDate: string },
+  newBed: Pick<BedSpace, "blockCode" | "roomNumber" | "bedLetter" | "rentAmount" | "roomGender">,
+): { vacated: BillingRecord; occupied: BillingRecord } {
+  return {
+    vacated: {
+      ...oldBilling,
+      ...vacantBillingPatch(),
+    },
+    occupied: {
+      ...newBilling,
+      house_block: newBed.blockCode,
+      room_number: String(newBed.roomNumber),
+      bed_space: newBed.bedLetter,
+      room_gender: newBed.roomGender ?? newBilling.room_gender,
+      tenant_name: tenant.name,
+      phone_number: tenant.phone,
+      entry_date: tenant.moveInDate,
+      current_rent: newBed.rentAmount,
+      ...occupancyBillingCarry(oldBilling),
+    },
+  };
+}
+
 export function bedHasTenant(bed: BedSpace): boolean {
   return Boolean(bed.student?.id && !isVacantName(bed.student.name));
 }
