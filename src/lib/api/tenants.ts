@@ -212,6 +212,30 @@ export async function onboardStudent(input: OnboardStudentInput): Promise<{
   }, { ...input, moveInDate: moveIn });
 }
 
+/** Columns written by `updateStudent`. NRC is omitted unless the caller sent it. */
+export function tenantUpdateFields(input: {
+  name: string;
+  phone: string;
+  email: string;
+  moveInDate: string;
+  nrc?: string;
+  gender?: RoomGender;
+}): Record<string, unknown> {
+  const fields: Record<string, unknown> = {
+    full_name: input.name,
+    phone: input.phone || null,
+    email: input.email ? normalizeEmail(input.email) : null,
+    move_in_date: input.moveInDate,
+  };
+  if (input.nrc !== undefined) {
+    fields.nrc = displayOptional(input.nrc) || null;
+  }
+  if (input.gender) {
+    fields.gender = input.gender;
+  }
+  return fields;
+}
+
 export async function updateStudent(input: {
   tenantId: string;
   name: string;
@@ -239,14 +263,7 @@ export async function updateStudent(input: {
 
   const { data: tenant, error: tenantErr } = await sb
     .from("tenants")
-    .update({
-      full_name: input.name,
-      phone: input.phone || null,
-      email: input.email ? normalizeEmail(input.email) : null,
-      nrc: displayOptional(input.nrc) || null,
-      move_in_date: input.moveInDate,
-      ...(input.gender ? { gender: input.gender } : {}),
-    })
+    .update(tenantUpdateFields(input))
     .eq("id", input.tenantId)
     .select("*")
     .single();
