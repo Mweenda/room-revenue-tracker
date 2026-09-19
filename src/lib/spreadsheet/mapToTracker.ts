@@ -1,4 +1,4 @@
-import type { BedSpace, Payment } from "../types";
+import type { BedSpace, BillingRecord, Payment } from "../types";
 import type { BedPatch, BillingPatch, ParsedBillingRow, ParsedPaymentRow, ParsedRosterRow } from "./types";
 
 export function xlsxPaymentId(uniqueId: string, paymentDate: string): string {
@@ -56,6 +56,32 @@ export function mapParsedBillingPatches(rows: ParsedBillingRow[], knownBillingId
       accumulated_total: row.accumulatedTotal,
       total_balance: row.totalBalance,
     }));
+}
+
+/**
+ * Spreadsheet billing is often a stale export. New verified payments must still
+ * hit the live ledger (via apply_verified_payment). If we wrote the sheet's
+ * balances after inserting those payments, the trigger's credit would be undone.
+ */
+export function preserveLiveLedgerForNewPayments(
+  patches: BillingPatch[],
+  liveBilling: Array<Pick<BillingRecord, "billing_id" | "total_balance" | "target_month" | "accumulated_total">>,
+  newPayments: Array<Pick<Payment, "bedSpaceId">>,
+): BillingPatch[] {
+  const bedsWithNewPayments = new Set(newPayments.map((payment) => payment.bedSpaceId));
+  if (bedsWithNewPayments.size === 0) return patches;
+  const liveById = new Map(liveBilling.map((row) => [row.billing_id, row]));
+  return patches.map((patch) => {
+    if (!bedsWithNewPayments.has(patch.billing_id)) return patch;
+    const live = liveById.get(patch.billing_id);
+    if (!live) return patch;
+    return {
+      ...patch,
+      total_balance: live.total_balance,
+      target_month: live.target_month,
+      accumulated_total: live.accumulated_total,
+    };
+  });
 }
 
 export function mapParsedRosterPatches(rows: ParsedRosterRow[], knownBedIds: Set<string>): BedPatch[] {
