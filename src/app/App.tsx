@@ -673,7 +673,6 @@ function StudentProfileView({ bed, billingRecord, onSave, onPhotoUpload }: { bed
         email: form.email,
         nrc: form.nrc,
         moveInDate: bed.student.moveInDate,
-        sendLoginLink: true,
       });
       setSaved(true);
       setEditMode(false);
