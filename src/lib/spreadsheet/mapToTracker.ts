@@ -1,8 +1,25 @@
 import type { BedSpace, Payment } from "../types";
 import type { BedPatch, BillingPatch, ParsedBillingRow, ParsedPaymentRow, ParsedRosterRow } from "./types";
 
-export function xlsxPaymentId(uniqueId: string, paymentDate: string): string {
-  return `xlsx-${paymentDate}-${uniqueId}`;
+function spreadsheetIdToken(value: string): string {
+  return value.trim().replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+/**
+ * Stable id for an imported spreadsheet receipt. Date + bed alone collides when
+ * a student pays twice on the same day (partial cash + remainder, or two
+ * receipts), so amount and receipt number are part of the key.
+ */
+export function xlsxPaymentId(
+  uniqueId: string,
+  paymentDate: string,
+  amount?: number,
+  receiptNumber?: string,
+): string {
+  const receipt = spreadsheetIdToken(receiptNumber ?? "");
+  const amountPart = amount != null && Number.isFinite(amount) ? String(amount) : "";
+  const extras = [receipt, amountPart].filter(Boolean).join("-");
+  return extras ? `xlsx-${paymentDate}-${uniqueId}-${extras}` : `xlsx-${paymentDate}-${uniqueId}`;
 }
 
 export function paymentDedupeKey(payment: Pick<Payment, "bedSpaceId" | "submittedAt" | "amount">): string {
@@ -18,7 +35,7 @@ export function mapParsedPayments(rows: ParsedPaymentRow[], knownBedIds: Set<str
   for (const row of rows) {
     if (!knownBedIds.has(row.uniqueId)) continue;
     mapped.push({
-      id: xlsxPaymentId(row.uniqueId, row.paymentDate),
+      id: xlsxPaymentId(row.uniqueId, row.paymentDate, row.amountPaid, row.receiptNumber),
       studentName: row.tenantName,
       bedSpaceId: row.uniqueId,
       amount: row.amountPaid,
@@ -35,12 +52,15 @@ export function filterNewPayments(incoming: Payment[], existing: Payment[]): Pay
   const exact = new Set(existing.map(paymentDedupeKey));
   const monthly = new Set(existing.map(paymentMonthDedupeKey));
   const ids = new Set(existing.map((payment) => payment.id));
-  return incoming.filter((payment) => {
-    if (ids.has(payment.id)) return false;
-    if (exact.has(paymentDedupeKey(payment))) return false;
-    if (monthly.has(paymentMonthDedupeKey(payment))) return false;
-    return true;
-  });
+  const fresh: Payment[] = [];
+  for (const payment of incoming) {
+    if (ids.has(payment.id)) continue;
+    if (exact.has(paymentDedupeKey(payment))) continue;
+    if (monthly.has(paymentMonthDedupeKey(payment))) continue;
+    ids.add(payment.id);
+    fresh.push(payment);
+  }
+  return fresh;
 }
 
 export function mapParsedBillingPatches(rows: ParsedBillingRow[], knownBillingIds: Set<string>): BillingPatch[] {

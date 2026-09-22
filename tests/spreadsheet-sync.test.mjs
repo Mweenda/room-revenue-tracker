@@ -456,7 +456,7 @@ test("payment mapper uses xlsx ids and skips unknown beds plus existing month du
 
   const mapped = mapParsedPayments(parsedPayments, new Set(["BBH-1-A"]));
   assert.equal(mapped.length, 1);
-  assert.equal(mapped[0].id, xlsxPaymentId("BBH-1-A", "2026-06-05"));
+  assert.equal(mapped[0].id, xlsxPaymentId("BBH-1-A", "2026-06-05", 950, "REC-0005"));
   assert.equal(mapped[0].status, "verified");
   assert.equal(mapped[0].method, "Cash");
   assert.equal(mapped[0].transactionRef, "REC-0005");
@@ -472,6 +472,64 @@ test("payment mapper uses xlsx ids and skips unknown beds plus existing month du
   assert.equal(fresh.length, 0);
   assert.equal(paymentDedupeKey(mapped[0]), "BBH-1-A|2026-06-05|950");
   assert.equal(paymentMonthDedupeKey(mapped[0]), "BBH-1-A|2026-06|950");
+});
+
+test("same-day payments on one bed keep both receipts when amount or receipt differs", () => {
+  const parsedPayments = [
+    {
+      uniqueId: "BBH-1-A",
+      tenantName: "Adrian mulale",
+      paymentDate: "2026-06-05",
+      monthCovered: "Jun",
+      year: 2026,
+      amountPaid: 500,
+      status: "Paid",
+      receiptNumber: "REC-AM",
+    },
+    {
+      uniqueId: "BBH-1-A",
+      tenantName: "Adrian mulale",
+      paymentDate: "2026-06-05",
+      monthCovered: "Jun",
+      year: 2026,
+      amountPaid: 450,
+      status: "Paid",
+      receiptNumber: "REC-PM",
+    },
+  ];
+
+  const mapped = mapParsedPayments(parsedPayments, new Set(["BBH-1-A"]));
+  assert.equal(mapped.length, 2);
+  assert.equal(mapped[0].id, "xlsx-2026-06-05-BBH-1-A-REC-AM-500");
+  assert.equal(mapped[1].id, "xlsx-2026-06-05-BBH-1-A-REC-PM-450");
+  assert.notEqual(mapped[0].id, mapped[1].id);
+
+  const fresh = filterNewPayments(mapped, []);
+  assert.equal(fresh.length, 2);
+  assert.deepEqual(fresh.map((row) => row.amount).sort((a, b) => a - b), [450, 500]);
+
+  const reimport = filterNewPayments(mapped, fresh);
+  assert.equal(reimport.length, 0);
+});
+
+test("duplicate spreadsheet payment ids in one upload keep a single row", () => {
+  const first = payment({
+    id: "xlsx-2026-06-05-BBH-1-A-REC-1-500",
+    amount: 500,
+    submittedAt: "2026-06-05",
+    transactionRef: "REC-1",
+  });
+  const duplicate = { ...first };
+  const laterDifferent = payment({
+    id: "xlsx-2026-06-05-BBH-1-A-REC-2-400",
+    amount: 400,
+    submittedAt: "2026-06-05",
+    transactionRef: "REC-2",
+  });
+  const fresh = filterNewPayments([first, duplicate, laterDifferent], []);
+  assert.equal(fresh.length, 2);
+  assert.equal(fresh[0].id, first.id);
+  assert.equal(fresh[1].id, laterDifferent.id);
 });
 
 test("billing and roster patches only update beds that already exist", () => {
@@ -706,7 +764,7 @@ test("tRPC upload parses the workbook, stores the original, and upserts only new
   assert.equal(result.recordsSynced.billing, 1);
   assert.equal(repo.state.files.length, 1);
   assert.equal(repo.state.payments.length, 2);
-  assert.ok(repo.state.payments.some((row) => row.id === "xlsx-2026-06-05-BBH-1-A"));
+  assert.ok(repo.state.payments.some((row) => row.id === "xlsx-2026-06-05-BBH-1-A-REC-0005-950"));
   assert.equal(repo.state.billing.find((row) => row.billing_id === "ANX-19-B")?.total_balance, 0);
   assert.equal(repo.state.beds.find((row) => row.id === "BBH-1-A")?.rentAmount, 950);
 });
