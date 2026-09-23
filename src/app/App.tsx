@@ -1502,9 +1502,9 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
                                   <button type="button" onClick={() => setOccupancyForm({ ...occupancyForm, monthsCovered: Math.max(2, occupancyForm.monthsCovered) })} className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold border ${occupancyForm.monthsCovered > 1 ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"}`}>Multiple months</button>
                                 </div>
                                 {occupancyForm.monthsCovered > 1 && (
-                                  <input type="number" min={2} max={12} value={occupancyForm.monthsCovered} onChange={(e) => setOccupancyForm({ ...occupancyForm, monthsCovered: Number(e.target.value) })} className={inputStyles} />
+                                  <input type="number" min={2} max={6} value={occupancyForm.monthsCovered} onChange={(e) => setOccupancyForm({ ...occupancyForm, monthsCovered: Number(e.target.value) })} className={inputStyles} />
                                 )}
-                                <p className="text-[11px] text-slate-500 mt-1.5">Secured through {addBillingMonths(occupancyForm.targetMonth, Math.max(1, occupancyForm.monthsCovered) - 1)}.</p>
+                                <p className="text-[11px] text-slate-500 mt-1.5">Secured through {addBillingMonths(occupancyForm.targetMonth, Math.max(1, occupancyForm.monthsCovered) - 1)}. Prepaid terms longer than 6 months cannot be stored on a month-name ledger.</p>
                               </div>
                             )}
                             <div>

@@ -8,7 +8,7 @@ import {
   type BillingMonth,
 } from "./billing";
 import { lastVerifiedPayment } from "./paymentsEdit";
-import { addBillingMonths, monthsFromTo } from "./paymentTracking";
+import { addBillingMonths, assertPrepaidAdvanceAllowed, monthsFromTo } from "./paymentTracking";
 import type {
   BedSpace,
   BillingRecord,
@@ -94,7 +94,7 @@ export function occupancyEditDefaults(
 function monthsCoveredValue(raw: number): number {
   const months = Math.floor(Number(raw));
   if (!Number.isFinite(months) || months < 1) throw new Error("Covered months must be at least 1");
-  if (months > 12) throw new Error("Covered months cannot exceed 12");
+  if (months > 6) throw new Error("Covered months cannot exceed 6. Longer prepaid terms wrap and are billed as arrears.");
   return months;
 }
 
@@ -117,6 +117,7 @@ export function occupancyBillingPatch(
 
   if (input.billingStatus === "Paid / Secured") {
     totalBalance = 0;
+    assertPrepaidAdvanceAllowed(monthsCovered - 1, input.targetMonth, currentMonth);
     targetMonth = addBillingMonths(input.targetMonth, monthsCovered - 1);
   } else if (input.billingStatus === "OVERDUE / UNPAID") {
     const requested = input.totalBalance;

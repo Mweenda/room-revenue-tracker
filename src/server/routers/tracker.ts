@@ -136,7 +136,7 @@ export const occupancyRouter = router({
       rentAmount: z.number(),
       billingStatus: occupancyBillingStatus,
       targetMonth: billingMonth,
-      monthsCovered: z.number().int().min(1).max(12),
+      monthsCovered: z.number().int().min(1).max(6),
       totalBalance: z.number().optional(),
       paymentDate: z.string(),
       paymentAmount: z.number(),

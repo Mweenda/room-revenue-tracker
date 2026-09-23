@@ -48,6 +48,37 @@ export function monthsFromTo(fromMonth: string, toMonth: string): number {
   return (to - from + 12) % 12;
 }
 
+/**
+ * Month names have no year, so 7+ months ahead is the same encoding as
+ * 5 or fewer months behind. `months_to_charge` then treats prepaid April
+ * (from September) as five missed months and the live roll adds that rent.
+ */
+export const MAX_PREPAID_AHEAD_MONTHS = 6;
+
+export const PREPAID_HORIZON_ERROR =
+  "Prepaid coverage cannot extend more than 6 months ahead. Month names wrap, so 7+ months prepaid is billed as arrears on the next roll.";
+
+/**
+ * Refuse an intentional advance that would land more than 6 months ahead of
+ * the live month. A target already in the past (paid through August while it
+ * is September) is not prepaid and must stay writable.
+ */
+export function assertPrepaidAdvanceAllowed(
+  extraMonths: number,
+  fromMonth: string,
+  currentMonth: string,
+): void {
+  if (extraMonths > MAX_PREPAID_AHEAD_MONTHS) {
+    throw new Error(PREPAID_HORIZON_ERROR);
+  }
+  const ahead = monthsFromTo(currentMonth, fromMonth);
+  const behind = monthsFromTo(fromMonth, currentMonth);
+  const fromIsCurrentOrFuture = ahead === 0 || (ahead > 0 && ahead <= behind);
+  if (fromIsCurrentOrFuture && ahead + extraMonths > MAX_PREPAID_AHEAD_MONTHS) {
+    throw new Error(PREPAID_HORIZON_ERROR);
+  }
+}
+
 export function entryDayOfMonth(entryDate: string): number | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(entryDate.trim());
   if (!match) return null;
@@ -133,9 +164,11 @@ export function applyPaymentToLedger(input: {
   if (newBalance === 0) {
     const overpay = Math.max(0, amount - oldBalance);
     const extraMonths = rent > 0 ? Math.floor(overpay / rent) : 0;
+    const baseMonth = prepaidBaseMonth(startMonth, currentMonth, oldBalance);
+    assertPrepaidAdvanceAllowed(extraMonths, baseMonth, currentMonth);
     return {
       totalBalance: 0,
-      targetMonth: addBillingMonths(prepaidBaseMonth(startMonth, currentMonth, oldBalance), extraMonths),
+      targetMonth: addBillingMonths(baseMonth, extraMonths),
     };
   }
 
