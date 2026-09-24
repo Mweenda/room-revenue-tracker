@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { computeRentIncrease, resolveScope, buildRentPreview, summarizePreview } =
+const { computeRentIncrease, resolveScope, buildRentPreview, summarizePreview, applyRentIncrementToBilling } =
   await import('../src/lib/rent.ts');
+const { rollBillingRecord } = await import('../src/lib/paymentTracking.ts');
 
 function bed(id, blockCode, roomNumber, bedLetter, rentAmount, student) {
   return { id, blockCode, roomNumber, bedLetter, identifier: id, status: student ? 'occupied' : 'vacant', rentAmount, student };
@@ -68,4 +69,57 @@ test('summary counts occupied, vacant and notifiable beds', () => {
   assert.equal(summary.currentMonthlyTotal, 4050);
   assert.equal(summary.newMonthlyTotal, 4455);
   assert.equal(Math.round(summary.monthlyUplift), 405);
+});
+
+test('increment updates the live billing rate without rewriting arrears', () => {
+  const records = [
+    {
+      billing_id: 'BBH-1A',
+      house_block: 'BBH',
+      room_number: '1',
+      bed_space: 'A',
+      room_gender: 'Female',
+      tenant_name: 'Ada',
+      phone_number: '0977',
+      entry_date: '2026-02-01',
+      current_rent: 900,
+      target_month: 'Sep',
+      accumulated_total: 2700,
+      total_balance: 900,
+      days_past_due: 6,
+      billing_status: 'OVERDUE / UNPAID',
+    },
+    {
+      billing_id: 'NWG-2A',
+      house_block: 'NWG',
+      room_number: '2',
+      bed_space: 'A',
+      room_gender: 'Male',
+      tenant_name: 'Ben',
+      phone_number: '0978',
+      entry_date: '2026-03-01',
+      current_rent: 1000,
+      target_month: 'Sep',
+      accumulated_total: 1000,
+      total_balance: 0,
+      days_past_due: 0,
+      billing_status: 'Paid / Secured',
+    },
+  ];
+  const preview = buildRentPreview(BEDS, { kind: 'all' }, 'percentage', 20);
+  const next = applyRentIncrementToBilling(
+    records,
+    new Map(preview.map((row) => [row.bedId, row.newRent])),
+  );
+
+  assert.equal(next[0].current_rent, 1080);
+  assert.equal(next[0].total_balance, 900, 'existing arrears stay at the amount already charged');
+  assert.equal(next[0].target_month, 'Sep');
+  assert.equal(next[1].current_rent, 1200);
+  assert.equal(next[1].total_balance, 0);
+  assert.equal(records[0].current_rent, 900, 'source billing rows are untouched');
+
+  const rolled = rollBillingRecord(next[1], 'Oct', new Date('2026-10-01T08:00:00+02:00'));
+  assert.equal(rolled.total_balance, 1200);
+  assert.equal(rolled.target_month, 'Oct');
 });

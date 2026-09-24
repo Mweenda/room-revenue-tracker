@@ -21,7 +21,7 @@ import { inviteStudentToPortal, sendTenantNotification, sendWelcomeEmail } from 
 import { deriveStudentAccounts, applyStudentAccountUpdate, applyManualVerifiedPayment, enrichStudentAccounts } from "../lib/students";
 import { applyOccupancyAdminEdit, type OccupancyAdminEditInput } from "../lib/occupancyBillingEdit";
 import { applyPaymentEdit } from "../lib/paymentsEdit";
-import { buildRentPreview, type RentIncreaseMode, type RentScope } from "../lib/rent";
+import { applyRentIncrementToBilling, buildRentPreview, type RentIncreaseMode, type RentScope } from "../lib/rent";
 import type { RentIncrementRow } from "../lib/api/rent";
 import type { StudentAccountRow } from "../lib/api/students";
 import type {
@@ -513,6 +513,7 @@ export function useTrackerData() {
             newRentByBed.has(bed.id) ? { ...bed, rentAmount: newRentByBed.get(bed.id)! } : bed,
           ),
         );
+        setBillingRecords((prev) => applyRentIncrementToBilling(prev, newRentByBed));
       }
 
       // Only occupied beds with a resolved tenant can be notified. Settled

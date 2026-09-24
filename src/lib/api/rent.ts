@@ -20,8 +20,9 @@ export type RentIncrementRow = {
 };
 
 /**
- * Forward-only rent change: updates the lease rate on bed_spaces and writes one
- * audit_log row per bed. The current billing cycle is intentionally untouched.
+ * Forward-only rent change: updates the lease rate on bed_spaces and the live
+ * billing current_rent, and writes one audit_log row per bed. Outstanding
+ * balances and target months are left alone so nobody is pushed into arrears.
  */
 export async function applyRentIncrement(input: ApplyRentIncrementInput): Promise<RentIncrementRow[]> {
   const sb = getSupabase();
