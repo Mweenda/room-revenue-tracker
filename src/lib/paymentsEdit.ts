@@ -9,6 +9,31 @@ export type PaymentEditInput = {
   bedSpaceId: string;
 };
 
+export const VERIFIED_PAYMENT_LEDGER_EDIT_ERROR =
+  "Changing the amount or bed on a verified receipt would leave the rent ledger wrong. Edit occupancy billing instead.";
+
+export function verifiedPaymentTouchesLedger(
+  payment: Pick<Payment, "status" | "amount" | "bedSpaceId">,
+  input: Pick<PaymentEditInput, "amount" | "bedSpaceId">,
+): boolean {
+  if (payment.status !== "verified") return false;
+  const nextAmount = Number(input.amount);
+  const currentAmount = Number(payment.amount);
+  if (Number.isFinite(nextAmount) && Number.isFinite(currentAmount) && nextAmount !== currentAmount) {
+    return true;
+  }
+  return payment.bedSpaceId.trim() !== input.bedSpaceId.trim();
+}
+
+export function assertVerifiedPaymentEditSafe(
+  payment: Pick<Payment, "status" | "amount" | "bedSpaceId">,
+  input: Pick<PaymentEditInput, "amount" | "bedSpaceId">,
+): void {
+  if (verifiedPaymentTouchesLedger(payment, input)) {
+    throw new Error(VERIFIED_PAYMENT_LEDGER_EDIT_ERROR);
+  }
+}
+
 export function applyPaymentEdit(payment: Payment, input: PaymentEditInput): Payment {
   if (!(input.amount > 0)) throw new Error("Amount must be greater than zero");
   if (!input.transactionRef.trim()) throw new Error("A transaction reference is required");
@@ -18,6 +43,7 @@ export function applyPaymentEdit(payment: Payment, input: PaymentEditInput): Pay
     throw new Error("Choose Airtel, MTN, or Cash");
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.submittedAt)) throw new Error("Use a valid payment date");
+  assertVerifiedPaymentEditSafe(payment, input);
 
   return {
     ...payment,

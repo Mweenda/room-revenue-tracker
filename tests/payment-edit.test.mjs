@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { applyPaymentEdit, lastVerifiedPayment, matchesPaymentSearch } = await import('../src/lib/paymentsEdit.ts');
+const {
+  applyPaymentEdit,
+  assertVerifiedPaymentEditSafe,
+  lastVerifiedPayment,
+  matchesPaymentSearch,
+  verifiedPaymentTouchesLedger,
+} = await import('../src/lib/paymentsEdit.ts');
 const { enrichStudentAccounts, deriveStudentAccounts } = await import('../src/lib/students.ts');
 
 const payments = [
@@ -29,6 +35,42 @@ test('landlords can manually edit a payment record', () => {
 test('payment edits reject empty refs and non-positive amounts', () => {
   assert.throws(() => applyPaymentEdit(payments[1], { amount: 0, method: 'MTN', transactionRef: 'x', submittedAt: '2026-09-02', studentName: 'Ada', bedSpaceId: 'BBH-1-A' }), /greater than zero/i);
   assert.throws(() => applyPaymentEdit(payments[1], { amount: 10, method: 'MTN', transactionRef: '  ', submittedAt: '2026-09-02', studentName: 'Ada', bedSpaceId: 'BBH-1-A' }), /reference/i);
+});
+
+test('verified payment edits may change metadata but not amount or bed', () => {
+  const verified = payments[0];
+  assert.equal(verifiedPaymentTouchesLedger(verified, { amount: 400, bedSpaceId: 'BBH-1-A' }), false);
+  assert.equal(verifiedPaymentTouchesLedger(verified, { amount: 500, bedSpaceId: 'BBH-1-A' }), true);
+  assert.equal(verifiedPaymentTouchesLedger(verified, { amount: 400, bedSpaceId: 'BBH-2-B' }), true);
+  assert.equal(verifiedPaymentTouchesLedger(payments[1], { amount: 999, bedSpaceId: 'BBH-2-B' }), false);
+
+  const metaOnly = applyPaymentEdit(verified, {
+    amount: 400,
+    method: 'Cash',
+    transactionRef: 'FIXED-REF',
+    submittedAt: '2026-08-02',
+    studentName: 'Ada Lovelace',
+    bedSpaceId: 'BBH-1-A',
+  });
+  assert.equal(metaOnly.transactionRef, 'FIXED-REF');
+  assert.equal(metaOnly.amount, 400);
+  assert.equal(metaOnly.status, 'verified');
+
+  assert.throws(
+    () => applyPaymentEdit(verified, {
+      amount: 350,
+      method: 'Airtel',
+      transactionRef: 'old',
+      submittedAt: '2026-08-01',
+      studentName: 'Ada Lovelace',
+      bedSpaceId: 'BBH-1-A',
+    }),
+    /occupancy billing/i,
+  );
+  assert.throws(
+    () => assertVerifiedPaymentEditSafe(verified, { amount: 400, bedSpaceId: 'UPV-10-D' }),
+    /occupancy billing/i,
+  );
 });
 
 test('last verified payment is the most recent successful one', () => {
