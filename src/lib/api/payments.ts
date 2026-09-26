@@ -98,12 +98,23 @@ export async function recordManualPayment(input: {
   return mapPayment(verified);
 }
 
+function rpcMissing(error: { message?: string; code?: string } | null, fn: string): boolean {
+  const code = (error?.code ?? "").toUpperCase();
+  const text = (error?.message ?? "").toLowerCase();
+  return (
+    code === "PGRST202" ||
+    code === "42883" ||
+    (text.includes(fn) && (text.includes("does not exist") || text.includes("could not find")))
+  );
+}
+
 export async function verifyPayment(id: string): Promise<Payment> {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
   const { data, error } = await dbFn(sb, "verify_payment", { p_payment_id: id });
   if (!error && data) return mapPayment(data);
+  if (error && !rpcMissing(error, "verify_payment")) throw error;
 
   // Fallback until migration 007 is applied.
   const { data: row, error: updateError } = await sb
