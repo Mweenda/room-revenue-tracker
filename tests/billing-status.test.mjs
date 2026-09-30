@@ -6,6 +6,7 @@ const {
   computeBillingStatus,
   getDaysPastDue,
   isOverdueAfterGrace,
+  BILLING_STATUS_OVERVIEW,
 } = await import('../src/lib/billing.ts');
 
 test('grace period is five days', () => {
@@ -37,4 +38,12 @@ test('days past due is counted from the first of the target month', () => {
   assert.equal(due, 5);
   const sameDay = getDaysPastDue('Jan', 2026, new Date('2026-01-01T12:00:00Z'));
   assert.equal(sameDay, 0);
+});
+
+test('each billing status has a short landlord overview', () => {
+  assert.match(BILLING_STATUS_OVERVIEW['Open Window'], /payment window/i);
+  assert.match(BILLING_STATUS_OVERVIEW['Paid / Secured'], /settled/i);
+  assert.match(BILLING_STATUS_OVERVIEW['OVERDUE / UNPAID'], /grace/i);
+  assert.match(BILLING_STATUS_OVERVIEW.Vacant, /empty/i);
+  assert.match(BILLING_STATUS_OVERVIEW['Grace Period'], /5-day/i);
 });

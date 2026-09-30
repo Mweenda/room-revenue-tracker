@@ -137,6 +137,14 @@ export function computeBillingStatus(
   return "Vacant";
 }
 
+export const BILLING_STATUS_OVERVIEW: Record<BillingStatus, string> = {
+  "Open Window": "Current-month rent is still due. These tenants are in the payment window and have not settled this cycle.",
+  "Paid / Secured": "These accounts are fully settled or prepaid. No collection action is needed right now.",
+  "OVERDUE / UNPAID": "Balances past the 5-day grace period. These accounts need follow-up and collection.",
+  "Vacant": "Empty bed spaces. The amount is monthly capacity if the bed is occupied.",
+  "Grace Period": "Payment is late but still inside the 5-day grace. Not yet flagged as overdue.",
+};
+
 export function calcUtilitySplit(totalCost: number, activeStudents: number, ownerCap = OWNER_UTILITY_CAP) {
   const ownerContribution = Math.min(ownerCap * activeStudents, totalCost);
   const excess = Math.max(0, totalCost - ownerContribution);
