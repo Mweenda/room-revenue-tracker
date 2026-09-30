@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  BedDouble,
+  Check,
+  Inbox,
   Mail,
   MessageCircle,
   Pencil,
@@ -9,6 +12,7 @@ import {
   Search,
   TrendingUp,
   UserMinus,
+  UserPlus,
   UserX,
   Users,
   X,
@@ -47,8 +51,9 @@ import { displayOptional } from "../../lib/occupancy";
 import { bedLabel, matchesStudentSearch, TENANT_STATUS_LABEL } from "../../lib/students";
 import { composeRentReminder, whatsappChatUrl } from "../../lib/whatsapp";
 import type { StudentAccountRow } from "../../lib/api/students";
+import { approveStudentApplication, listStudentApplications, rejectStudentApplication } from "../../lib/api";
 import type { RentIncreaseMode, RentScope } from "../../lib/rent";
-import type { BedSpace, BillingStatus, BlockCode, OnboardStudentInput, RoomGender, TenantStatus, UpdateStudentAccountInput } from "../../lib/types";
+import type { BedSpace, BillingStatus, BlockCode, OnboardStudentInput, RoomGender, StudentApplication, TenantStatus, UpdateStudentAccountInput } from "../../lib/types";
 
 const billingBadge: Record<string, string> = {
   "Open Window": "bg-emerald-100 text-emerald-800",
@@ -85,6 +90,7 @@ export default function StudentsView({
   updateStudentAccount,
   evictStudent,
   applyRentIncrement,
+  onDataChanged,
 }: {
   students: StudentAccountRow[];
   beds: BedSpace[];
@@ -102,6 +108,7 @@ export default function StudentsView({
     value: number;
     effectiveDate: string;
   }) => Promise<ApplyRentIncrementResult>;
+  onDataChanged?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState<BlockCode | "all">("all");
@@ -217,6 +224,12 @@ export default function StudentsView({
 
   return (
     <div className="space-y-5">
+      <ApplicationsPanel
+        beds={beds}
+        canManage={canManage}
+        onChanged={onDataChanged}
+      />
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Active Students" value={activeStudents.length} icon={Users} />
         <KpiCard label="Overdue" value={overdue.length} accent="text-red-600" icon={AlertTriangle} />
@@ -642,5 +655,279 @@ export default function StudentsView({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function bedOptionLabel(bed: BedSpace): string {
+  const id = bed.identifier || `${bed.blockCode}-${bed.roomNumber}-${bed.bedLetter}`;
+  return `${id} · ${bed.roomGender ?? "Any"} · ${fmtKwacha(bed.rentAmount)}`;
+}
+
+function ApplicationsPanel({
+  beds,
+  canManage,
+  onChanged,
+}: {
+  beds: BedSpace[];
+  canManage: boolean;
+  onChanged?: () => void;
+}) {
+  const [apps, setApps] = useState<StudentApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const [assignTarget, setAssignTarget] = useState<StudentApplication | null>(null);
+  const [bedId, setBedId] = useState("");
+  const [rent, setRent] = useState("");
+  const [moveInDate, setMoveInDate] = useState("");
+
+  const [rejectTarget, setRejectTarget] = useState<StudentApplication | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  async function reload() {
+    try {
+      const rows = await listStudentApplications("pending");
+      setApps(rows);
+    } catch (err) {
+      // A student without landlord rights should never see this panel; stay quiet on read errors.
+      console.error("Could not load applications", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const done = await listStudentApplications("pending").catch(() => [] as StudentApplication[]);
+      if (active) {
+        setApps(done);
+        setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const vacantForTarget = useMemo(() => {
+    if (!assignTarget) return [] as BedSpace[];
+    return beds.filter((bed) =>
+      bed.status === "vacant" &&
+      (!assignTarget.gender || !bed.roomGender || bed.roomGender === assignTarget.gender),
+    );
+  }, [beds, assignTarget]);
+
+  function openAssign(app: StudentApplication) {
+    setAssignTarget(app);
+    const firstBed = beds.find((bed) =>
+      bed.status === "vacant" && (!app.gender || !bed.roomGender || bed.roomGender === app.gender),
+    );
+    setBedId(firstBed?.id ?? "");
+    setRent(firstBed ? String(firstBed.rentAmount) : "");
+    setMoveInDate(app.preferredMoveInDate ?? new Date().toISOString().slice(0, 10));
+  }
+
+  function onBedChange(nextBedId: string) {
+    setBedId(nextBedId);
+    const bed = beds.find((row) => row.id === nextBedId);
+    if (bed) setRent(String(bed.rentAmount));
+  }
+
+  async function handleApprove() {
+    if (!assignTarget || !bedId) return;
+    setBusy(true);
+    try {
+      const rentAmount = Number(rent);
+      const result = await approveStudentApplication({
+        applicationId: assignTarget.id,
+        bedId,
+        rentAmount: Number.isFinite(rentAmount) && rentAmount > 0 ? rentAmount : null,
+        moveInDate: moveInDate || null,
+      });
+      toast.success(`${result.fullName} assigned to ${result.bedSpaceId}`, {
+        description: result.inviteSent
+          ? `An invite was emailed to ${result.email} to set a password.`
+          : `Saved, but the invite email to ${result.email} could not be sent. They can use "Forgot password" once email works.`,
+      });
+      setAssignTarget(null);
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      toast.error("Could not assign bed space", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReject() {
+    if (!rejectTarget || !rejectReason.trim()) return;
+    setBusy(true);
+    try {
+      await rejectStudentApplication({ applicationId: rejectTarget.id, reason: rejectReason.trim() });
+      toast.success(`Application from ${rejectTarget.fullName} rejected`);
+      setRejectTarget(null);
+      setRejectReason("");
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      toast.error("Could not reject application", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading || apps.length === 0) return null;
+
+  return (
+    <SectionCard
+      title={`Bed space requests · ${apps.length}`}
+      action={<span className="text-xs text-slate-500">Self-onboarding</span>}
+    >
+      <div className="p-5 space-y-3">
+        {apps.map((app) => (
+          <div
+            key={app.id}
+            className="flex flex-col gap-3 rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex w-8 h-8 rounded-xl bg-violet-100 text-violet-700 items-center justify-center shrink-0">
+                  <UserPlus size={16} />
+                </span>
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-900 truncate">{app.fullName}</p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {app.email}
+                    {app.phone ? ` · ${app.phone}` : ""}
+                    {app.gender ? ` · ${app.gender}` : ""}
+                  </p>
+                </div>
+              </div>
+              {app.note && <p className="text-xs text-slate-500 mt-1.5 line-clamp-2">“{app.note}”</p>}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => openAssign(app)}
+                disabled={!canManage}
+                className={`${buttonStyles.primary} px-3 py-1.5 text-xs min-h-0`}
+                title={canManage ? "Assign a bed space" : "Landlord access required"}
+              >
+                <BedDouble size={13} /> Assign bed
+              </button>
+              <button
+                onClick={() => { setRejectTarget(app); setRejectReason(""); }}
+                disabled={!canManage}
+                className={`${buttonStyles.outline} px-3 py-1.5 text-xs min-h-0`}
+                title={canManage ? "Reject this request" : "Landlord access required"}
+              >
+                <X size={13} /> Reject
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {assignTarget && (
+        <ModalFrame onClose={() => setAssignTarget(null)} className="max-w-md">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Assign a bed space</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{assignTarget.fullName} · {assignTarget.email}</p>
+            </div>
+            <button onClick={() => setAssignTarget(null)} className="text-slate-400 hover:text-slate-700 p-1">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Bed space</label>
+              {vacantForTarget.length === 0 ? (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                  No vacant {assignTarget.gender ? `${assignTarget.gender.toLowerCase()} ` : ""}beds are available. Free a
+                  bed first, then assign it.
+                </p>
+              ) : (
+                <select value={bedId} onChange={(e) => onBedChange(e.target.value)} className={inputStyles}>
+                  {vacantForTarget.map((bed) => (
+                    <option key={bed.id} value={bed.id}>{bedOptionLabel(bed)}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Monthly rent</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={rent}
+                  onChange={(e) => setRent(e.target.value)}
+                  className={inputStyles}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Move-in date</label>
+                <input
+                  type="date"
+                  value={moveInDate}
+                  onChange={(e) => setMoveInDate(e.target.value)}
+                  className={inputStyles}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="px-5 py-4 border-t border-slate-100 flex gap-3">
+            <button onClick={() => setAssignTarget(null)} className={`${buttonStyles.outline} flex-1`}>Cancel</button>
+            <button
+              onClick={() => void handleApprove()}
+              disabled={busy || !canManage || !bedId}
+              className={`${buttonStyles.primary} flex-1`}
+            >
+              <Check size={14} /> {busy ? "Assigning…" : "Assign & invite"}
+            </button>
+          </div>
+        </ModalFrame>
+      )}
+
+      <AlertDialog open={Boolean(rejectTarget)} onOpenChange={(open) => { if (!open) setRejectTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Inbox size={18} className="text-red-600" /> Reject {rejectTarget?.fullName}'s request?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This closes the application. The student is not onboarded and no bed space is assigned.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="reject-app-reason">
+              Reason <span className="text-red-600">*</span>
+            </label>
+            <textarea
+              id="reject-app-reason"
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g. Not a current or prospective student"
+              className={`${inputStyles} resize-none`}
+            />
+          </div>
+          <AlertDialogFooter>
+            <button type="button" onClick={() => setRejectTarget(null)} className={buttonStyles.outline}>Cancel</button>
+            <button
+              type="button"
+              onClick={() => void handleReject()}
+              disabled={busy || !canManage || !rejectReason.trim()}
+              className={buttonStyles.danger}
+            >
+              {busy ? "Rejecting…" : "Confirm reject"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </SectionCard>
   );
 }

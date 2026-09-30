@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  approveStudentApplication,
+  listStudentApplications,
+  rejectStudentApplication,
+  submitStudentApplication,
+} from "../../lib/api/applications";
 import { fetchBeds } from "../../lib/api/beds";
 import { fetchBillingRecords } from "../../lib/api/billing";
 import {
@@ -362,6 +368,49 @@ export const snapshotsRouter = router({
       report: input.report,
       actor: input.actor,
     })),
+});
+
+const applicationStatus = z.enum(["pending", "approved", "rejected"]);
+
+export const applicationsRouter = router({
+  submit: publicProcedure
+    .input(z.object({
+      fullName: z.string().min(1),
+      email: z.string().min(3),
+      phone: z.string().optional(),
+      nrc: z.string().optional(),
+      gender: roomGender.nullish(),
+      preferredMoveInDate: z.string().optional(),
+      note: z.string().optional(),
+    }))
+    .mutation(({ input }) => submitStudentApplication({
+      fullName: input.fullName,
+      email: input.email,
+      phone: input.phone,
+      nrc: input.nrc,
+      gender: input.gender ?? null,
+      preferredMoveInDate: input.preferredMoveInDate,
+      note: input.note,
+    })),
+  list: landlordProcedure
+    .input(z.object({ status: applicationStatus.optional() }).optional())
+    .query(({ input }) => listStudentApplications(input?.status)),
+  approve: landlordProcedure
+    .input(z.object({
+      applicationId: z.string(),
+      bedId: z.string(),
+      rentAmount: z.number().nullish(),
+      moveInDate: z.string().nullish(),
+    }))
+    .mutation(({ input }) => approveStudentApplication({
+      applicationId: input.applicationId,
+      bedId: input.bedId,
+      rentAmount: input.rentAmount ?? null,
+      moveInDate: input.moveInDate ?? null,
+    })),
+  reject: landlordProcedure
+    .input(z.object({ applicationId: z.string(), reason: z.string().min(1) }))
+    .mutation(({ input }) => rejectStudentApplication(input)),
 });
 
 export const rentRouter = router({

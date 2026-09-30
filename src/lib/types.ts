@@ -12,6 +12,35 @@ export const PAYMENT_METHODS = ["Cash", "Airtel", "MTN"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export type RoomGender = "Male" | "Female";
 
+export type StudentApplicationStatus = "pending" | "approved" | "rejected";
+
+export interface StudentApplication {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  nrc: string | null;
+  gender: RoomGender | null;
+  preferredMoveInDate: string | null;
+  note: string | null;
+  status: StudentApplicationStatus;
+  reviewNote: string | null;
+  assignedBedSpaceId: string | null;
+  createdTenantId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+export interface SubmitStudentApplicationInput {
+  fullName: string;
+  email: string;
+  phone?: string;
+  nrc?: string;
+  gender?: RoomGender | null;
+  preferredMoveInDate?: string;
+  note?: string;
+}
+
 export interface Student {
   id: string;
   name: string;

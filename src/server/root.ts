@@ -1,5 +1,6 @@
 import { spreadsheetRouter } from "./routers/spreadsheet";
 import {
+  applicationsRouter,
   authRouter,
   bedsRouter,
   billingRouter,
@@ -32,6 +33,7 @@ export const appRouter = router({
   profiles: profilesRouter,
   snapshots: snapshotsRouter,
   rent: rentRouter,
+  applications: applicationsRouter,
   spreadsheet: spreadsheetRouter,
 });
 

@@ -168,3 +168,19 @@ export async function findTenantByEmail(email: string) {
 export async function saveOccupancyAdmin(...args: Parameters<typeof import("./occupancyAdmin").saveOccupancyAdmin>) {
   return (await caller()).occupancy.saveAdmin(args[0]);
 }
+
+export async function submitStudentApplication(...args: Parameters<typeof import("./applications").submitStudentApplication>) {
+  return (await caller()).applications.submit(args[0]);
+}
+
+export async function listStudentApplications(status?: import("../types").StudentApplicationStatus) {
+  return (await caller()).applications.list(status ? { status } : undefined);
+}
+
+export async function approveStudentApplication(...args: Parameters<typeof import("./applications").approveStudentApplication>) {
+  return (await caller()).applications.approve(args[0]);
+}
+
+export async function rejectStudentApplication(...args: Parameters<typeof import("./applications").rejectStudentApplication>) {
+  return (await caller()).applications.reject(args[0]);
+}

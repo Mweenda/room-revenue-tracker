@@ -19,6 +19,7 @@ import { formatHeaderDateTime, useLiveDateTime } from "../hooks/useLiveDateTime"
 import { isBedAssignable, displayOptional, isBillingVacant, isVacantName } from "../lib/occupancy";
 import { LandingPage } from "../components/LandingPage";
 import { StudentLogin } from "../components/StudentLogin";
+import { StudentApplication } from "../components/StudentApplication";
 import StudentOnboarding from "../components/StudentOnboarding";
 import { LandlordLogin } from "../components/LandlordLogin";
 import { AdminLogin } from "../components/AdminLogin";
@@ -53,6 +54,7 @@ import { lastVerifiedPayment, matchesPaymentSearch } from "../lib/paymentsEdit";
 import { composeRentReminder, normalizeWhatsAppPhone, whatsappChatUrl } from "../lib/whatsapp";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
+import { approveStudentApplication, rejectStudentApplication } from "../lib/api";
 import type { ApplyRentIncrementResult } from "./components/RentIncrementDialog";
 import type { EvictionResult } from "./views/StudentsView";
 import type { RentIncreaseMode, RentScope } from "../lib/rent";
@@ -2386,7 +2388,7 @@ const BOTTOM_NAV: { id: LandlordView; label: string; icon: React.ElementType }[]
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudentAccount, saveOccupancyAdmin, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, updatePay, saveUtility, toggleSettled, updateIssueStatus, refreshData }: {
+function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues, utilities, students, landlord, dataError, onLandlordProfileSave, onLogout, onboard, updateStudentAccount, saveOccupancyAdmin, vacateBed, evictStudent, applyRentIncrement, verifyPay, rejectPay, updatePay, saveUtility, toggleSettled, updateIssueStatus, approveApplication, rejectApplication, refreshData }: {
   beds: BedSpace[];
   billingRecords: BillingRecord[];
   billingMap: Map<string, BillingRecord>;
@@ -2418,6 +2420,8 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   saveUtility: (blockCode: BlockCode, month: string, totalCost: number) => Promise<unknown>;
   toggleSettled: (blockCode: BlockCode, month: string, name: string) => Promise<void>;
   updateIssueStatus: (id: string, status: IssueStatus, resolutionNote?: string) => Promise<void>;
+  approveApplication: (input: { applicationId: string; bedId: string; rentAmount?: number | null; moveInDate?: string | null }) => Promise<{ fullName: string; bedSpaceId: string; email: string; inviteSent: boolean }>;
+  rejectApplication: (input: { applicationId: string; reason: string }) => Promise<unknown>;
   refreshData: () => Promise<unknown>;
 }) {
   const now = useLiveDateTime();
@@ -2549,6 +2553,8 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
               verifyPay={verifyPay}
               rejectPay={rejectPay}
               updateIssueStatus={updateIssueStatus}
+              approveApplication={approveApplication}
+              rejectApplication={rejectApplication}
               onAfterAction={() => { void refreshData(); void inbox.refresh(); }}
             />
           </div>
@@ -2575,7 +2581,7 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
             />
           )}
           {view === "utilities" && <UtilitiesView utilities={utilities} beds={beds} saveUtility={saveUtility} toggleSettled={toggleSettled} />}
-          {view === "students"  && <StudentsView students={students} beds={beds} canManage={canManage} onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }} updateStudentAccount={updateStudentAccount} evictStudent={evictStudent} applyRentIncrement={applyRentIncrement} />}
+          {view === "students"  && <StudentsView students={students} beds={beds} canManage={canManage} onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }} updateStudentAccount={updateStudentAccount} evictStudent={evictStudent} applyRentIncrement={applyRentIncrement} onDataChanged={refreshData} />}
           {view === "reports"   && (
             <ReportsView
               key={`reports-${inboxRoute?.kind ?? "default"}-${inboxRoute?.at ?? 0}`}
@@ -2759,7 +2765,7 @@ function StudentEmailConfirmation({ onBackToLogin, onLoginSuccess, purpose = "co
 
 // ─── App Root ─────────────────────────────────────────────────────────────────
 
-type View = "landing" | "student-login" | "student-confirm" | "student-reset" | "landlord-login" | "student-dashboard" | "landlord-dashboard" | "admin-login" | "admin-dashboard";
+type View = "landing" | "student-login" | "student-apply" | "student-confirm" | "student-reset" | "landlord-login" | "student-dashboard" | "landlord-dashboard" | "admin-login" | "admin-dashboard";
 
 /** True when the app is running as the student portal (native APK shell or the ?app=student deep link). */
 function isStudentShell(): boolean {
@@ -2780,6 +2786,7 @@ function AppRoutes() {
       const auth = params.get("auth");
       if (auth === "student-reset") return "student-reset";
       if (auth === "student" || auth === "student-confirm") return "student-confirm";
+      if (params.get("apply") === "1") return "student-apply";
       if (isStudentShell()) return "student-login";
       return "landing";
     })(),
@@ -2831,7 +2838,7 @@ function AppRoutes() {
     return <AdminDashboard admin={currentUser} onLogout={handleAdminLogout} />;
   }
 
-  if (tracker.loading && screen !== "landing" && screen !== "student-login" && screen !== "landlord-login" && screen !== "student-confirm" && screen !== "student-reset") {
+  if (tracker.loading && screen !== "landing" && screen !== "student-login" && screen !== "student-apply" && screen !== "landlord-login" && screen !== "student-confirm" && screen !== "student-reset") {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center space-y-2">
@@ -2857,6 +2864,7 @@ function AppRoutes() {
         )}
         <LandingPage 
           onStudentLogin={() => setView("student-login")}
+          onStudentApply={() => setView("student-apply")}
           onLandlordLogin={() => setView("landlord-login")}
         />
       </>
@@ -2864,7 +2872,11 @@ function AppRoutes() {
   }
 
   if (screen === "student-login") {
-    return <StudentLogin hideBack={studentShell} onBack={() => { if (!studentShell) setView("landing"); }} onLoginSuccess={handleStudentLoginSuccess} />;
+    return <StudentLogin hideBack={studentShell} onBack={() => { if (!studentShell) setView("landing"); }} onApply={() => setView("student-apply")} onLoginSuccess={handleStudentLoginSuccess} />;
+  }
+
+  if (screen === "student-apply") {
+    return <StudentApplication hideBack={studentShell} onBack={() => setView("student-login")} onGoToLogin={() => setView("student-login")} />;
   }
 
   if (screen === "student-confirm") {
@@ -2945,6 +2957,14 @@ function AppRoutes() {
       saveUtility={tracker.saveUtility}
       toggleSettled={tracker.toggleSettled}
       updateIssueStatus={tracker.updateIssue}
+      approveApplication={async (input) => {
+        assertLandlord(currentUser, "assign a bed space");
+        return approveStudentApplication(input);
+      }}
+      rejectApplication={async (input) => {
+        assertLandlord(currentUser, "reject an application");
+        return rejectStudentApplication(input);
+      }}
     />
   );
 }

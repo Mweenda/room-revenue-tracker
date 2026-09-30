@@ -5,8 +5,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 const Color _slate900 = Color(0xFF0F172A);
-const String _portalUrl =
-    'https://room-revenue-tracker.web.app/student';
+/// Student portal WebView — login and "Apply for a bed space" come from the live site.
+const String _portalUrl = 'https://room-revenue-tracker.web.app/student';
 const String _shellUserAgentToken = 'RoomRevenueStudent/1.1.3';
 
 void main() {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Bell, CheckCircle, ChevronRight, MessageCircle, Wrench } from "lucide-react";
+import { AlertTriangle, BedDouble, Bell, CheckCircle, ChevronRight, MessageCircle, UserPlus, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   composeLandlordWhatsApp,
@@ -12,7 +12,8 @@ import {
   type LandlordNotificationKind,
 } from "../../lib/landlordNotifications";
 import { whatsappChatUrl } from "../../lib/whatsapp";
-import type { BedSpace, BillingRecord, IssueStatus, LandlordView, MaintenanceIssue, Payment } from "../../lib/types";
+import type { BedSpace, BillingRecord, IssueStatus, LandlordView, MaintenanceIssue, Payment, RoomGender } from "../../lib/types";
+import { fmtKwacha } from "../../lib/billing";
 import type { StudentAccountRow } from "../../lib/api/students";
 import { buttonStyles } from "./primitives";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -23,6 +24,7 @@ const KIND_ICON: Record<LandlordNotificationKind, typeof Bell> = {
   payment_submitted: Bell,
   payment_verified: CheckCircle,
   maintenance_submitted: Wrench,
+  student_application: UserPlus,
 };
 
 const KIND_TONE: Record<LandlordNotificationKind, string> = {
@@ -30,6 +32,7 @@ const KIND_TONE: Record<LandlordNotificationKind, string> = {
   payment_submitted: "bg-amber-100 text-amber-800",
   payment_verified: "bg-emerald-100 text-emerald-700",
   maintenance_submitted: "bg-blue-100 text-blue-700",
+  student_application: "bg-violet-100 text-violet-700",
 };
 
 function openWhatsApp(phone: string, text: string) {
@@ -54,6 +57,8 @@ export function LandlordNotificationBell({
   verifyPay,
   rejectPay,
   updateIssueStatus,
+  approveApplication,
+  rejectApplication,
   onAfterAction,
 }: {
   items: LandlordNotification[];
@@ -71,6 +76,8 @@ export function LandlordNotificationBell({
   verifyPay: (id: string) => Promise<void>;
   rejectPay: (id: string, reason: string) => Promise<void>;
   updateIssueStatus: (id: string, status: IssueStatus, resolutionNote?: string) => Promise<void>;
+  approveApplication: (input: { applicationId: string; bedId: string; rentAmount?: number | null; moveInDate?: string | null }) => Promise<{ fullName: string; bedSpaceId: string; email: string; inviteSent: boolean }>;
+  rejectApplication: (input: { applicationId: string; reason: string }) => Promise<unknown>;
   onAfterAction?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -131,7 +138,7 @@ export function LandlordNotificationBell({
                 </div>
                 <p className="text-sm font-semibold text-slate-900">No notifications yet</p>
                 <p className="text-xs text-slate-500 mt-1">
-                  Overdue rent, new payments, and maintenance complaints will show up here.
+                  Overdue rent, payments, maintenance, and bed-space applications will show up here.
                 </p>
               </div>
             ) : (
@@ -197,6 +204,8 @@ export function LandlordNotificationBell({
         verifyPay={verifyPay}
         rejectPay={rejectPay}
         updateIssueStatus={updateIssueStatus}
+        approveApplication={approveApplication}
+        rejectApplication={rejectApplication}
         onAfterAction={onAfterAction}
       />
     </>
@@ -215,6 +224,8 @@ function LandlordNotificationDialog({
   verifyPay,
   rejectPay,
   updateIssueStatus,
+  approveApplication,
+  rejectApplication,
   onAfterAction,
 }: {
   item: LandlordNotification | null;
@@ -228,6 +239,8 @@ function LandlordNotificationDialog({
   verifyPay: (id: string) => Promise<void>;
   rejectPay: (id: string, reason: string) => Promise<void>;
   updateIssueStatus: (id: string, status: IssueStatus, resolutionNote?: string) => Promise<void>;
+  approveApplication: (input: { applicationId: string; bedId: string; rentAmount?: number | null; moveInDate?: string | null }) => Promise<{ fullName: string; bedSpaceId: string; email: string; inviteSent: boolean }>;
+  rejectApplication: (input: { applicationId: string; reason: string }) => Promise<unknown>;
   onAfterAction?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -235,6 +248,10 @@ function LandlordNotificationDialog({
   const [rejectReason, setRejectReason] = useState("");
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveNote, setResolveNote] = useState("");
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [bedId, setBedId] = useState("");
+  const [rent, setRent] = useState("");
+  const [moveInDate, setMoveInDate] = useState("");
 
   const contact = useMemo(
     () => item ? resolveNotificationContact(item, { billingRecords, beds, students }) : null,
@@ -242,6 +259,17 @@ function LandlordNotificationDialog({
   );
   const payment = item?.paymentId ? payments.find((row) => row.id === item.paymentId) : undefined;
   const issue = item?.issueId ? issues.find((row) => row.id === item.issueId) : undefined;
+  const applicationId = item?.kind === "student_application" ? item.metadata.applicationId : undefined;
+  const applicantGender = (item?.metadata.gender === "Male" || item?.metadata.gender === "Female")
+    ? (item.metadata.gender as RoomGender)
+    : null;
+  const vacantBeds = useMemo(() => {
+    if (!applicationId) return [] as BedSpace[];
+    return beds.filter((bed) =>
+      bed.status === "vacant" &&
+      (!applicantGender || !bed.roomGender || bed.roomGender === applicantGender),
+    );
+  }, [applicationId, applicantGender, beds]);
   const whatsappText = item && contact
     ? composeLandlordWhatsApp(item.kind, contact, item.metadata)
     : "";
@@ -284,6 +312,7 @@ function LandlordNotificationDialog({
         if (!next) {
           setRejectOpen(false);
           setResolveOpen(false);
+          setAssignOpen(false);
           setRejectReason("");
           setResolveNote("");
           onClose();
@@ -323,6 +352,7 @@ function LandlordNotificationDialog({
               </a>
             )}
 
+            {item.kind !== "student_application" && (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">WhatsApp reminder</p>
               <p className="text-xs text-slate-600 whitespace-pre-line">{whatsappText}</p>
@@ -330,18 +360,21 @@ function LandlordNotificationDialog({
                 <p className="text-xs text-amber-700">No phone number on file for this student.</p>
               )}
             </div>
+            )}
 
             {rejectOpen && (
               <div className="space-y-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="notif-reject">
-                  Rejection reason
+                  {applicationId ? "Rejection reason" : "Rejection reason"}
                 </label>
                 <textarea
                   id="notif-reject"
                   rows={3}
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="e.g. Reference does not match our records"
+                  placeholder={applicationId
+                    ? "e.g. Not a current or incoming student of this boarding house"
+                    : "e.g. Reference does not match our records"}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400"
                 />
               </div>
@@ -364,14 +397,161 @@ function LandlordNotificationDialog({
             )}
 
             <div className="flex flex-wrap gap-2 pt-1">
-              <button
-                type="button"
-                className={buttonStyles.primary}
-                disabled={busy || !contact.phone}
-                onClick={sendWhatsApp}
-              >
-                <MessageCircle size={15} /> Send WhatsApp
-              </button>
+              {item.kind !== "student_application" && (
+                <button
+                  type="button"
+                  className={buttonStyles.primary}
+                  disabled={busy || !contact.phone}
+                  onClick={sendWhatsApp}
+                >
+                  <MessageCircle size={15} /> Send WhatsApp
+                </button>
+              )}
+
+              {applicationId && !assignOpen && !rejectOpen && (
+                <>
+                  <button
+                    type="button"
+                    className={buttonStyles.primary}
+                    disabled={busy}
+                    onClick={() => {
+                      const first = vacantBeds[0];
+                      setBedId(first?.id ?? "");
+                      setRent(first ? String(first.rentAmount) : "");
+                      setMoveInDate(new Date().toISOString().slice(0, 10));
+                      setAssignOpen(true);
+                    }}
+                  >
+                    <BedDouble size={15} /> Assign bed space
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonStyles.danger}
+                    disabled={busy}
+                    onClick={() => setRejectOpen(true)}
+                  >
+                    <X size={15} /> Reject request
+                  </button>
+                </>
+              )}
+
+              {applicationId && assignOpen && (
+                <div className="w-full space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Assign a vacant bed</p>
+                  {vacantBeds.length === 0 ? (
+                    <p className="text-sm text-amber-700">
+                      No vacant {applicantGender ? `${applicantGender.toLowerCase()} ` : ""}beds are available. Free a bed on Students, then try again.
+                    </p>
+                  ) : (
+                    <>
+                      <label className="block text-xs font-semibold text-slate-600">
+                        Bed space
+                        <select
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                          value={bedId}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            setBedId(next);
+                            const bed = vacantBeds.find((row) => row.id === next);
+                            if (bed) setRent(String(bed.rentAmount));
+                          }}
+                        >
+                          {vacantBeds.map((bed) => (
+                            <option key={bed.id} value={bed.id}>
+                              {bed.identifier || bed.id} · {bed.roomGender ?? "Any"} · {fmtKwacha(bed.rentAmount)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="block text-xs font-semibold text-slate-600">
+                          Monthly rent
+                          <input
+                            type="number"
+                            min="0"
+                            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                            value={rent}
+                            onChange={(e) => setRent(e.target.value)}
+                          />
+                        </label>
+                        <label className="block text-xs font-semibold text-slate-600">
+                          Move-in date
+                          <input
+                            type="date"
+                            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                            value={moveInDate}
+                            onChange={(e) => setMoveInDate(e.target.value)}
+                          />
+                        </label>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={buttonStyles.outline}
+                      disabled={busy}
+                      onClick={() => setAssignOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className={buttonStyles.primary}
+                      disabled={busy || !bedId}
+                      onClick={async () => {
+                        const rentAmount = Number(rent);
+                        const ok = await run(
+                          () => approveApplication({
+                            applicationId,
+                            bedId,
+                            rentAmount: Number.isFinite(rentAmount) && rentAmount > 0 ? rentAmount : null,
+                            moveInDate: moveInDate || null,
+                          }).then(() => undefined),
+                          "Bed space assigned. An invite email will be sent if possible.",
+                        );
+                        if (ok) {
+                          setAssignOpen(false);
+                          onClose();
+                        }
+                      }}
+                    >
+                      Confirm assignment
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {applicationId && rejectOpen && (
+                <>
+                  <button
+                    type="button"
+                    className={buttonStyles.outline}
+                    disabled={busy}
+                    onClick={() => { setRejectOpen(false); setRejectReason(""); }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonStyles.danger}
+                    disabled={busy || !rejectReason.trim()}
+                    onClick={async () => {
+                      const ok = await run(
+                        () => rejectApplication({ applicationId, reason: rejectReason.trim() }).then(() => undefined),
+                        "Application rejected",
+                      );
+                      if (ok) {
+                        setRejectOpen(false);
+                        setRejectReason("");
+                        onClose();
+                      }
+                    }}
+                  >
+                    Confirm reject
+                  </button>
+                </>
+              )}
 
               {pendingPayment && item.paymentId && !rejectOpen && (
                 <>

@@ -49,6 +49,7 @@ test("tRPC router exposes the former rpc surface", () => {
     "notifications",
     "rent",
     "spreadsheet",
+    "applications",
   ]) {
     assert.ok(name in appRouter._def.record, `missing router ${name}`);
   }
@@ -76,4 +77,8 @@ test("tRPC auth.tenantExists is public and payments.verify requires a landlord",
 
   await assert.rejects(() => caller.payments.verify({ id: "p-1" }), /landlord/i);
   await assert.rejects(() => caller.auth.linkLandlordProfile(), /sign in/i);
+  await assert.rejects(
+    () => caller.applications.list(),
+    /landlord/i,
+  );
 });

@@ -6,11 +6,13 @@ import { useStudentViewport } from "../hooks/useStudentViewport";
 interface StudentLoginProps {
   onBack: () => void;
   onLoginSuccess: (user: any) => void;
+  /** Opens the public self-onboarding application form. */
+  onApply?: () => void;
   /** In the student portal / APK shell there is no landlord entry point to return to. */
   hideBack?: boolean;
 }
 
-export function StudentLogin({ onBack, onLoginSuccess, hideBack = false }: StudentLoginProps) {
+export function StudentLogin({ onBack, onLoginSuccess, onApply, hideBack = false }: StudentLoginProps) {
   const viewport = useStudentViewport();
   const [mode, setMode] = useState<"login" | "otp-request" | "otp-verify" | "forgot-password">("login");
   const [loading, setLoading] = useState(false);
@@ -195,8 +197,21 @@ export function StudentLogin({ onBack, onLoginSuccess, hideBack = false }: Stude
         </div>
 
         <p className="text-xs text-slate-400 text-center mb-4">
-          New students open the invite link from their landlord, choose gender and a vacant bed, then create a password.
+          New here? Apply for a bed space. Once the landlord assigns you a room, we email an invite so you can set a password and sign in.
         </p>
+
+        {onApply && (
+          <div className="mb-5 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center">
+            <p className="text-sm text-slate-200 font-medium">No bed space yet?</p>
+            <button
+              type="button"
+              onClick={onApply}
+              className="mt-1 text-sm font-semibold text-blue-300 hover:text-white transition-colors"
+            >
+              Apply for a bed space →
+            </button>
+          </div>
+        )}
 
         {mode === "login" && (
           <form onSubmit={handleLogin} className="space-y-4">

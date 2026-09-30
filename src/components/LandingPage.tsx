@@ -3,10 +3,11 @@ import { getCurrentYear } from "../lib/billing";
 
 interface LandingPageProps {
   onStudentLogin: () => void;
+  onStudentApply?: () => void;
   onLandlordLogin: () => void;
 }
 
-export function LandingPage({ onStudentLogin, onLandlordLogin }: LandingPageProps) {
+export function LandingPage({ onStudentLogin, onStudentApply, onLandlordLogin }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Decorative background elements */}
@@ -38,6 +39,26 @@ export function LandingPage({ onStudentLogin, onLandlordLogin }: LandingPageProp
                 <LogIn size={18} className="mr-2" />
                 Login as Student
               </div>
+              {onStudentApply && (
+                <span
+                  role="link"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onStudentApply();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onStudentApply();
+                    }
+                  }}
+                  className="mt-4 text-xs font-semibold text-blue-200/90 hover:text-white underline-offset-4 hover:underline"
+                >
+                  New here? Apply for a bed space
+                </span>
+              )}
             </div>
           </button>
 

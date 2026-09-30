@@ -14,6 +14,7 @@ export const LANDLORD_NOTIFICATION_KINDS = [
   "payment_submitted",
   "payment_verified",
   "maintenance_submitted",
+  "student_application",
 ] as const;
 
 export type LandlordNotificationKind = (typeof LANDLORD_NOTIFICATION_KINDS)[number];
@@ -29,6 +30,11 @@ export interface LandlordNotificationDetails {
   paymentMethod?: string;
   category?: string;
   description?: string;
+  email?: string;
+  phone?: string;
+  gender?: string;
+  note?: string;
+  applicationId?: string;
   hrefView?: LandlordView;
 }
 
@@ -92,6 +98,8 @@ export function landlordNotificationView(item: Pick<LandlordNotification, "kind"
       return "pay";
     case "maintenance_submitted":
       return "reports";
+    case "student_application":
+      return "students";
   }
 }
 
@@ -148,6 +156,21 @@ export function buildLandlordNotificationCopy(
           "Open Reports to update the request.",
         ].filter(Boolean).join("\n\n"),
       };
+    case "student_application":
+      return {
+        title: `New bed space request · ${name}`,
+        preview: `${name} applied for a bed space${details.gender ? ` (${details.gender})` : ""}.`,
+        body: [
+          `${name} submitted a self-onboarding request.`,
+          [
+            details.email ? `Email: ${details.email}` : "",
+            details.phone ? `Phone: ${details.phone}` : "",
+            details.gender ? `Gender: ${details.gender}` : "",
+          ].filter(Boolean).join("\n"),
+          details.note?.trim() ? `Note: ${details.note.trim()}` : "",
+          "Open Students to assign a bed space or reject the request.",
+        ].filter(Boolean).join("\n\n"),
+      };
   }
 }
 
@@ -164,6 +187,8 @@ export function landlordNotificationDedupeKey(
       return `payment_verified:${details.paymentId ?? ""}`;
     case "maintenance_submitted":
       return `maintenance_submitted:${details.issueId ?? ""}`;
+    case "student_application":
+      return `student_application:${details.applicationId ?? ""}`;
   }
 }
 
@@ -332,6 +357,14 @@ export function composeLandlordWhatsApp(
         "— Room Revenue Tracker",
       ].filter((line) => line !== null).join("\n");
     }
+    case "student_application":
+      return [
+        `Hi ${contact.name},`,
+        "",
+        "Thank you for your bed space request. We are reviewing it and will confirm your assignment shortly.",
+        "",
+        "— Room Revenue Tracker",
+      ].join("\n");
   }
 }
 
@@ -343,6 +376,8 @@ export function pageActionLabel(item: Pick<LandlordNotification, "kind" | "metad
       return item.kind === "payment_verified" ? "View receipt" : "Review payment";
     case "reports":
       return "Open maintenance";
+    case "students":
+      return "Review application";
     default:
       return "Open related page";
   }

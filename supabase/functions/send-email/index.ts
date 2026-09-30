@@ -19,7 +19,8 @@ type NotificationType =
   | "payment_rejected"
   | "rent_due"
   | "maintenance_update"
-  | "rent_increase";
+  | "rent_increase"
+  | "application_rejected";
 
 const NOTIFICATION_TYPES: NotificationType[] = [
   "welcome",
@@ -28,6 +29,7 @@ const NOTIFICATION_TYPES: NotificationType[] = [
   "rent_due",
   "maintenance_update",
   "rent_increase",
+  "application_rejected",
 ];
 
 type Details = {
@@ -235,6 +237,16 @@ function buildEmail(
         `, name),
       };
 
+    case "application_rejected":
+      return {
+        subject: "Bed space request update - Room Revenue Tracker",
+        html: shell("Application not approved", "#dc2626", `
+          <p>Thank you for applying for a bed space. The landlord was not able to approve this request.</p>
+          <p><em>${esc(details.reason || "Please contact the landlord if you believe this is a mistake.")}</em></p>
+          <p>If you are a current or incoming student, ask the landlord to onboard you with this email address.</p>
+        `, name),
+      };
+
     case "rent_increase": {
       const oldAmount = Number(details.oldAmount ?? 0);
       const newAmount = Number(details.newAmount ?? 0);
@@ -292,6 +304,76 @@ async function createUserContext(request: Request): Promise<
   }
 }
 
+async function dispatchApplicationRejected(
+  _request: Request,
+  ctx: FunctionContext,
+  actorEmail: string | null,
+  body: { applicationId?: unknown } | null,
+  details: Details,
+): Promise<Response> {
+  const applicationId = typeof body?.applicationId === "string" ? body.applicationId.trim() : "";
+  if (!applicationId) {
+    return Response.json({ error: "applicationId is required" }, { status: 400 });
+  }
+
+  const { data: application, error } = await ctx.supabase
+    .from("student_applications")
+    .select("id, full_name, email, status, review_note")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (error) {
+    console.error("application lookup failed", error);
+    return Response.json({ error: "Could not load the application" }, { status: 500 });
+  }
+  if (!application?.email) {
+    return Response.json({ error: "Application not found" }, { status: 404 });
+  }
+
+  const reason = details.reason || application.review_note || "";
+  const { subject, html } = buildEmail(
+    "application_rejected",
+    application.full_name ?? "Applicant",
+    null,
+    { ...details, reason },
+  );
+
+  let delivered = false;
+  let failureReason: string | null = null;
+  try {
+    const { Resend } = await import("npm:resend");
+    const resend = new Resend(Deno.env.get("RESEND_API_KEY") ?? "");
+    const { error: sendError } = await resend.emails.send({
+      from: FROM,
+      to: application.email,
+      subject,
+      html,
+    });
+    if (sendError) throw sendError;
+    delivered = true;
+  } catch (sendError) {
+    failureReason = sendError instanceof Error ? sendError.message : String(sendError);
+    console.error("application rejection email failed", sendError);
+  }
+
+  const { data: landlordId } = await ctx.supabase.rpc("current_landlord_id");
+  const { error: logError } = await ctx.supabaseAdmin.from("notification_log").insert({
+    tenant_id: null,
+    recipient_email: application.email,
+    notification_type: "application_rejected",
+    subject,
+    status: delivered ? "sent" : "failed",
+    error_message: failureReason,
+    actor_email: actorEmail,
+    landlord_id: typeof landlordId === "string" ? landlordId : null,
+    details: { applicationId, reason },
+  });
+  if (logError) console.error("notification_log insert failed", logError);
+
+  return delivered
+    ? Response.json({ success: true, via: "resend" })
+    : Response.json({ error: "Email delivery failed" }, { status: 502 });
+}
+
 async function tenantLandlordId(ctx: FunctionContext, tenantId: string): Promise<string | null> {
   const { data, error } = await ctx.supabaseAdmin.rpc("tenant_landlord_id", { p_tenant_id: tenantId });
   if (error) {
@@ -329,6 +411,11 @@ async function dispatchNotification(request: Request, ctx: FunctionContext): Pro
         { status: 400 },
       );
     }
+
+    if (type === "application_rejected") {
+      return dispatchApplicationRejected(request, ctx, caller.user.email ?? null, body, details);
+    }
+
     if (typeof tenantId !== "string" || tenantId.trim() === "") {
       return Response.json({ error: "tenantId is required" }, { status: 400 });
     }

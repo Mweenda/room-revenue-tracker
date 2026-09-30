@@ -96,6 +96,31 @@ test("WhatsApp copy follows the notification kind", () => {
   assert.match(maintenance, /Tap dripping/);
 });
 
+test("student applications notify the landlord and open the Students review flow", () => {
+  const copy = inbox.buildLandlordNotificationCopy("student_application", {
+    studentName: "Gift Nankamba",
+    email: "gift@example.com",
+    phone: "0977000000",
+    gender: "Female",
+    applicationId: "app-1",
+  });
+  assert.equal(copy.title, "New bed space request · Gift Nankamba");
+  assert.match(copy.preview, /Female/);
+  assert.match(copy.body, /gift@example.com/);
+  assert.equal(
+    inbox.landlordNotificationDedupeKey("student_application", { applicationId: "app-1" }),
+    "student_application:app-1",
+  );
+  assert.equal(
+    inbox.landlordNotificationView({ kind: "student_application", metadata: { hrefView: "students" } }),
+    "students",
+  );
+  assert.equal(
+    inbox.pageActionLabel({ kind: "student_application", metadata: {} }),
+    "Review application",
+  );
+});
+
 test("contact lookup uses the billing phone for the related bed", () => {
   const item = {
     id: "n1",
