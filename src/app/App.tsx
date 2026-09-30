@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
 import {
   Building2, CreditCard, Zap, FileText, Plus, X, Check,
   Download, Eye, Home, User, Menu, CheckCircle,
@@ -6,7 +6,7 @@ import {
   Settings, LogOut, UserCircle, Camera, EyeOff,
   Bell, Shield, Phone, Mail, MapPin, Calendar,
   Edit3, Save, RefreshCw, HelpCircle, ExternalLink,
-  ChevronDown, ChevronsLeft, ChevronsRight, Hash, DollarSign, Users, BarChart3, Sun, Moon,
+  ChevronDown, Hash, DollarSign, Users, BarChart3, Sun, Moon,
   MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,15 +23,12 @@ import { StudentApplication } from "../components/StudentApplication";
 import StudentOnboarding from "../components/StudentOnboarding";
 import { LandlordLogin } from "../components/LandlordLogin";
 import { AdminLogin } from "../components/AdminLogin";
-import { AdminDashboard } from "../components/AdminDashboard";
 import { adminSignOut, changeStudentPassword, linkTenantToAuthUser, signOutStudent } from "../lib/auth";
 import { ColorModeProvider, ColorModeRoot, useColorMode } from "../lib/colorMode";
 import { getSupabase } from "../lib/supabase";
 import { Toaster } from "./components/ui/sonner";
 import { Badge, KpiCard, SectionCard, StatusBanner, GLASS_SOFT, ModalFrame, inputStyles, buttonStyles, HOVER_ROW } from "./components/primitives";
-import SpreadsheetPaymentBoard from "./components/SpreadsheetPaymentBoard";
 import StudentsView from "./views/StudentsView";
-import ReportsView from "./views/ReportsView";
 import { StudentNotificationsView } from "./views/StudentNotificationsView";
 import { Collapsible, CollapsibleTrigger } from "./components/ui/collapsible";
 import { StudentAppDownloadCard } from "./components/StudentAppDownload";
@@ -48,6 +45,7 @@ import {
 } from "../lib/landlordNotifications";
 import { isStudentNativeShell, pinStudentShellLocation, shouldShowWelcomeAd, studentShellLocation } from "../lib/studentApp";
 import { vacantBedsForGender } from "../lib/studentOnboarding";
+import { landlordRailCompact, LANDLORD_RAIL_COLLAPSE_MS, LANDLORD_RAIL_HOVER_QUERY } from "../lib/landlordSidebar";
 import { compactTitleVisible, headerCollapseProgress } from "../lib/studentPortalHeader";
 import { useStudentViewport } from "../hooks/useStudentViewport";
 import { lastVerifiedPayment, matchesPaymentSearch } from "../lib/paymentsEdit";
@@ -91,6 +89,16 @@ type ApplyRentIncrementFn = (input: {
   value: number;
   effectiveDate: string;
 }) => Promise<ApplyRentIncrementResult>;
+
+const AdminDashboard = lazy(() =>
+  import("../components/AdminDashboard").then((mod) => ({ default: mod.AdminDashboard })),
+);
+const ReportsView = lazy(() => import("./views/ReportsView"));
+const SpreadsheetPaymentBoard = lazy(() => import("./components/SpreadsheetPaymentBoard"));
+
+function ChunkFallback({ label }: { label: string }) {
+  return <div className="px-5 py-10 text-center text-sm text-slate-400">{label}</div>;
+}
 
 // ─── Helpers & Constants ─────────────────────────────────────────────────────
 
@@ -169,24 +177,6 @@ function Field({ label, value, onChange, placeholder, type = "text", disabled }:
 }
 
 // ─── User Menu ───────────────────────────────────────────────────────────────
-
-const LANDLORD_SIDEBAR_KEY = "rrt-landlord-sidebar-collapsed";
-
-function readLandlordSidebarCollapsed(): boolean {
-  try {
-    return localStorage.getItem(LANDLORD_SIDEBAR_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeLandlordSidebarCollapsed(collapsed: boolean) {
-  try {
-    localStorage.setItem(LANDLORD_SIDEBAR_KEY, collapsed ? "1" : "0");
-  } catch {
-    /* private mode / quota */
-  }
-}
 
 function UserMenu({ name, role, onLogout, onProfile, onSettings, dark = false, dropUp = true, compactDesktop = false }: {
   name: string; role: string; onLogout: () => void;
@@ -974,7 +964,9 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
         <KpiCard label="Overdue Exposure" value={fmt(groups["OVERDUE / UNPAID"].reduce((s, r) => s + r.total_balance, 0))} accent="text-red-600" icon={AlertTriangle} />
       </div>
 
-      <SpreadsheetPaymentBoard billingRecords={monthRecords} />
+      <Suspense fallback={<ChunkFallback label="Loading occupancy board…" />}>
+        <SpreadsheetPaymentBoard billingRecords={monthRecords} />
+      </Suspense>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 items-stretch">
         <SectionCard title="Billing Status Breakdown" className="xl:col-span-3 min-w-0">
@@ -1714,7 +1706,9 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
         <KpiCard label="Collection Rate" value={`${collectionRate}%`} accent="text-blue-700" sub="paid beds vs expected" icon={BarChart3} />
       </div>
 
-      <SpreadsheetPaymentBoard billingRecords={billingRecords} />
+      <Suspense fallback={<ChunkFallback label="Loading occupancy board…" />}>
+        <SpreadsheetPaymentBoard billingRecords={billingRecords} />
+      </Suspense>
 
       <SectionCard title={`Revenue Progress — ${formatMonthYear(getCurrentBillingMonth())}`}>
         <div className="p-5 space-y-3">
@@ -2427,7 +2421,11 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   const now = useLiveDateTime();
   const [view, setView] = useState<LandlordView>("portal");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(readLandlordSidebarCollapsed);
+  const [railExpanded, setRailExpanded] = useState(false);
+  const [pointerCanHover, setPointerCanHover] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia(LANDLORD_RAIL_HOVER_QUERY).matches,
+  );
+  const railCollapseTimer = useRef<number | null>(null);
   const [inboxRoute, setInboxRoute] = useState<{ kind: LandlordNotificationKind; at: number } | null>(null);
   const billingMonth = BILLING_MONTHS[now.getMonth()];
   const monthBillingRecords = billingRecords;
@@ -2462,70 +2460,90 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
     profile: "My Profile", settings: "Settings",
   };
 
+  useEffect(() => {
+    const media = window.matchMedia(LANDLORD_RAIL_HOVER_QUERY);
+    const sync = () => setPointerCanHover(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => () => {
+    if (railCollapseTimer.current) window.clearTimeout(railCollapseTimer.current);
+  }, []);
+
+  function expandRail() {
+    if (railCollapseTimer.current) {
+      window.clearTimeout(railCollapseTimer.current);
+      railCollapseTimer.current = null;
+    }
+    setRailExpanded(true);
+  }
+
+  function collapseRailSoon() {
+    if (railCollapseTimer.current) window.clearTimeout(railCollapseTimer.current);
+    railCollapseTimer.current = window.setTimeout(() => {
+      setRailExpanded(false);
+      railCollapseTimer.current = null;
+    }, LANDLORD_RAIL_COLLAPSE_MS);
+  }
+
+  const compact = landlordRailCompact(pointerCanHover, railExpanded);
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+      <div className="hidden lg:block w-[4.5rem] shrink-0" aria-hidden />
 
       <aside
-        data-collapsed={sidebarCollapsed ? "true" : "false"}
-        className={`fixed lg:static lg:shrink-0 inset-y-0 left-0 z-50 bg-slate-900 flex flex-col overflow-visible transition-[width,transform] duration-250 ease-out w-64 ${sidebarCollapsed ? "lg:w-[4.5rem]" : "lg:w-64"} ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+        data-collapsed={compact ? "true" : "false"}
+        onMouseEnter={expandRail}
+        onMouseLeave={collapseRailSoon}
+        onFocusCapture={expandRail}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) collapseRailSoon();
+        }}
+        className={`fixed inset-y-0 left-0 z-50 bg-slate-900 flex flex-col overflow-visible w-64 motion-safe:transition-[width,box-shadow,transform] motion-safe:duration-200 motion-safe:ease-out ${compact ? "lg:w-[4.5rem]" : "lg:w-64 lg:shadow-2xl"} ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
-        <div className={`py-5 border-b border-slate-800 ${sidebarCollapsed ? "px-5 lg:px-2" : "px-5"}`}>
-          <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? "lg:justify-center" : ""}`}>
+        <div className={`py-5 border-b border-slate-800 ${compact ? "px-5 lg:px-2" : "px-5"}`}>
+          <div className={`flex items-center gap-2.5 ${compact ? "lg:justify-center" : ""}`}>
             <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl flex items-center justify-center shadow-lg shrink-0"><Building2 size={17} className="text-white" /></div>
-            <div className={sidebarCollapsed ? "lg:hidden" : ""}><p className="text-white font-bold text-sm leading-tight">Room Revenue</p><p className="text-emerald-400 text-xs font-mono">Tracker · {getCurrentYear()}</p></div>
+            <div className={compact ? "lg:hidden" : ""}><p className="text-white font-bold text-sm leading-tight">Room Revenue</p><p className="text-emerald-400 text-xs font-mono">Tracker · {getCurrentYear()}</p></div>
           </div>
         </div>
 
-        <nav className={`py-4 space-y-0.5 flex-1 overflow-y-auto ${sidebarCollapsed ? "px-3 lg:px-2" : "px-3"}`}>
-          <p className={`text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2 ${sidebarCollapsed ? "lg:hidden" : ""}`}>Navigation</p>
+        <nav className={`py-4 space-y-0.5 flex-1 overflow-y-auto ${compact ? "px-3 lg:px-2" : "px-3"}`}>
+          <p className={`text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2 ${compact ? "lg:hidden" : ""}`}>Navigation</p>
           {MAIN_NAV.map(({ id, label, icon: Icon }) => {
             const badge = id === "pay" ? pendingPay : id === "reports" ? openIssues : id === "revenue" ? overdueCount : 0;
             return (
               <button key={id} type="button" title={label} onClick={() => { setView(id); setSidebarOpen(false); }}
-                className={`w-full flex items-center py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${sidebarCollapsed ? "gap-3 px-4 lg:justify-center lg:px-0 lg:gap-0" : "gap-3 px-4"} ${view === id ? "bg-emerald-600 text-white shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
+                className={`w-full flex items-center py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${compact ? "gap-3 px-4 lg:justify-center lg:px-0 lg:gap-0" : "gap-3 px-4"} ${view === id ? "bg-emerald-600 text-white shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
                 <span className="relative shrink-0">
                   <Icon size={16} className="transition-transform duration-150 group-hover:scale-110" />
-                  {badge > 0 && sidebarCollapsed && (
+                  {badge > 0 && compact && (
                     <span className={`hidden lg:flex absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 items-center justify-center text-[10px] font-bold rounded-full ${id === "revenue" ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>
                       {badge > 9 ? "9+" : badge}
                     </span>
                   )}
                 </span>
-                <span className={`flex-1 text-left ${sidebarCollapsed ? "lg:hidden" : ""}`}>{label}</span>
-                {badge > 0 && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${sidebarCollapsed ? "lg:hidden" : ""} ${view === id ? "bg-white/25 text-white" : id === "revenue" ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>{badge}</span>}
+                <span className={`flex-1 text-left ${compact ? "lg:hidden" : ""}`}>{label}</span>
+                {badge > 0 && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${compact ? "lg:hidden" : ""} ${view === id ? "bg-white/25 text-white" : id === "revenue" ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>{badge}</span>}
               </button>
             );
           })}
 
-          <div className={`pt-4 pb-1 ${sidebarCollapsed ? "lg:hidden" : ""}`}><p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2">Account</p></div>
+          <div className={`pt-4 pb-1 ${compact ? "lg:hidden" : ""}`}><p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2">Account</p></div>
           {BOTTOM_NAV.map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" title={label} onClick={() => { setView(id); setSidebarOpen(false); }}
-              className={`w-full flex items-center py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${sidebarCollapsed ? "gap-3 px-4 lg:justify-center lg:px-0 lg:gap-0" : "gap-3 px-4"} ${view === id ? "bg-slate-700 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
-              <Icon size={16} className="shrink-0" /><span className={sidebarCollapsed ? "lg:hidden" : ""}>{label}</span>
+              className={`w-full flex items-center py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${compact ? "gap-3 px-4 lg:justify-center lg:px-0 lg:gap-0" : "gap-3 px-4"} ${view === id ? "bg-slate-700 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
+              <Icon size={16} className="shrink-0" /><span className={compact ? "lg:hidden" : ""}>{label}</span>
             </button>
           ))}
         </nav>
 
-        <div className={`pb-3 border-t border-slate-800 pt-3 ${sidebarCollapsed ? "px-3 lg:px-2" : "px-3"}`}>
-          <button
-            type="button"
-            onClick={() => {
-              setSidebarCollapsed((prev) => {
-                const next = !prev;
-                writeLandlordSidebarCollapsed(next);
-                return next;
-              });
-            }}
-            title={sidebarCollapsed ? "Expand menu" : "Collapse menu"}
-            aria-expanded={!sidebarCollapsed}
-            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
-            className={`hidden lg:flex w-full items-center rounded-xl text-sm font-semibold text-slate-400 hover:bg-slate-800 hover:text-white transition-all duration-150 min-h-[44px] ${sidebarCollapsed ? "justify-center px-0" : "gap-3 px-4 py-2.5"}`}
-          >
-            {sidebarCollapsed ? <ChevronsRight size={16} className="shrink-0" /> : <ChevronsLeft size={16} className="shrink-0" />}
-            <span className={sidebarCollapsed ? "lg:hidden" : ""}>Collapse</span>
-          </button>
-          <UserMenu name={landlord?.name ?? "Property Owner"} role={landlord?.role ?? "Property Owner"} onLogout={onLogout} dark compactDesktop={sidebarCollapsed}
+        <div className={`pb-3 border-t border-slate-800 pt-3 ${compact ? "px-3 lg:px-2" : "px-3"}`}>
+          <UserMenu name={landlord?.name ?? "Property Owner"} role={landlord?.role ?? "Property Owner"} onLogout={onLogout} dark compactDesktop={compact}
             onProfile={() => { setView("profile"); setSidebarOpen(false); }}
             onSettings={() => { setView("settings"); setSidebarOpen(false); }} />
         </div>
@@ -2583,6 +2601,7 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
           {view === "utilities" && <UtilitiesView utilities={utilities} beds={beds} saveUtility={saveUtility} toggleSettled={toggleSettled} />}
           {view === "students"  && <StudentsView students={students} beds={beds} canManage={canManage} onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }} updateStudentAccount={updateStudentAccount} evictStudent={evictStudent} applyRentIncrement={applyRentIncrement} onDataChanged={refreshData} />}
           {view === "reports"   && (
+            <Suspense fallback={<ChunkFallback label="Loading reports…" />}>
             <ReportsView
               key={`reports-${inboxRoute?.kind ?? "default"}-${inboxRoute?.at ?? 0}`}
               issues={issues}
@@ -2595,6 +2614,7 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
               initialSubView={inboxRoute?.kind === "maintenance_submitted" ? "maintenance" : "hub"}
               onRefresh={refreshData}
             />
+            </Suspense>
           )}
           {view === "profile"   && <LandlordProfile beds={beds} billingRecords={monthBillingRecords} landlord={landlord} onSave={onLandlordProfileSave} />}
           {view === "settings"  && <LandlordSettings landlord={landlord} onProfileSave={onLandlordProfileSave} />}
@@ -2835,7 +2855,11 @@ function AppRoutes() {
   }
 
   if (view === "admin-dashboard") {
-    return <AdminDashboard admin={currentUser} onLogout={handleAdminLogout} />;
+    return (
+      <Suspense fallback={<ChunkFallback label="Loading admin console…" />}>
+        <AdminDashboard admin={currentUser} onLogout={handleAdminLogout} />
+      </Suspense>
+    );
   }
 
   if (tracker.loading && screen !== "landing" && screen !== "student-login" && screen !== "student-apply" && screen !== "landlord-login" && screen !== "student-confirm" && screen !== "student-reset") {
