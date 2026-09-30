@@ -1,5 +1,5 @@
 import type { StudentAccountRow } from "./api/students";
-import type { BedSpace, BillingRecord, ManualPaymentInput, Payment, TenantStatus, UpdateStudentAccountInput } from "./types";
+import type { BedSpace, BillingRecord, BlockCode, ManualPaymentInput, Payment, RoomGender, TenantStatus, UpdateStudentAccountInput } from "./types";
 import { assertUniqueActivePhone, bedHasTenant, vacantBillingPatch } from "./occupancy";
 import { occupancyBillingPatch, occupancyCoverageFromBilling } from "./occupancyBillingEdit";
 import { lastVerifiedPayment } from "./paymentsEdit";
@@ -57,6 +57,66 @@ export const TENANT_STATUS_LABEL: Record<TenantStatus, string> = {
   evicted: "Evicted",
   moved_out: "Moved Out",
 };
+
+export const STUDENT_BILLING_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "Open Window", label: "Open Window" },
+  { id: "Paid / Secured", label: "Paid" },
+  { id: "Grace Period", label: "Grace" },
+  { id: "OVERDUE / UNPAID", label: "Overdue" },
+] as const;
+
+export type StudentBillingFilter = (typeof STUDENT_BILLING_FILTERS)[number]["id"];
+export type StudentTenantFilter = TenantStatus | "all" | "removed";
+
+export const STUDENT_TENANT_FILTERS: { id: StudentTenantFilter; label: string }[] = [
+  { id: "active", label: TENANT_STATUS_LABEL.active },
+  { id: "evicted", label: TENANT_STATUS_LABEL.evicted },
+  { id: "moved_out", label: TENANT_STATUS_LABEL.moved_out },
+  { id: "removed", label: "Removed" },
+  { id: "all", label: "All" },
+];
+
+export function matchesStudentBillingStatus(
+  row: Pick<StudentAccountRow, "billing_status">,
+  filter: StudentBillingFilter,
+): boolean {
+  if (filter === "all") return true;
+  return row.billing_status === filter;
+}
+
+export function matchesStudentTenantStatus(
+  row: Pick<StudentAccountRow, "tenant_status">,
+  filter: StudentTenantFilter,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "removed") return row.tenant_status === "evicted" || row.tenant_status === "moved_out";
+  return row.tenant_status === filter;
+}
+
+export function filterStudentAccounts(
+  students: StudentAccountRow[],
+  filters: {
+    search?: string;
+    block?: BlockCode | "all";
+    billing?: StudentBillingFilter;
+    status?: StudentTenantFilter;
+    gender?: RoomGender | "all";
+  } = {},
+): StudentAccountRow[] {
+  const search = filters.search ?? "";
+  const block = filters.block ?? "all";
+  const billing = filters.billing ?? "all";
+  const status = filters.status ?? "all";
+  const gender = filters.gender ?? "all";
+  return students.filter((row) =>
+    matchesStudentSearch(row, search) &&
+    (block === "all" || row.block_code === block) &&
+    matchesStudentBillingStatus(row, billing) &&
+    matchesStudentTenantStatus(row, status) &&
+    (gender === "all" || row.gender === gender || row.room_gender === gender),
+  );
+}
 
 export function bedLabel(row: StudentAccountRow): string {
   if (!row.block_code || row.room_number == null) return row.bed_space_id ?? "-";

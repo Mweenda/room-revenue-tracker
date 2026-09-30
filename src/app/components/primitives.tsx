@@ -29,15 +29,31 @@ export function Badge({ label, className }: { label: string; className: string }
   );
 }
 
-export function KpiCard({ label, value, sub, accent, icon: Icon }: {
+export function KpiCard({ label, value, sub, accent, icon: Icon, onClick, selected }: {
   label: string;
   value: string | number;
   sub?: string;
   accent?: string;
   icon?: React.ElementType;
+  onClick?: () => void;
+  selected?: boolean;
 }) {
   return (
-    <Card className={`gap-1 border-slate-200/80 bg-white/90 backdrop-blur-sm px-4 py-4 shadow-sm group ${HOVER_SURFACE}`}>
+    <Card
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-pressed={onClick ? Boolean(selected) : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      } : undefined}
+      className={`gap-1 border-slate-200/80 bg-white/90 backdrop-blur-sm px-4 py-4 shadow-sm group ${HOVER_SURFACE} ${
+        onClick ? "cursor-pointer text-left" : ""
+      } ${selected ? "ring-2 ring-emerald-500 border-emerald-300" : ""}`}
+    >
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</span>
         {Icon && <Icon size={16} className="text-slate-300 group-hover:text-slate-400 transition-colors" />}

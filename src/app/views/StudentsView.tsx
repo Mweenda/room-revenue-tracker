@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   BedDouble,
@@ -48,13 +48,13 @@ import StudentAccountDialog from "../components/StudentAccountDialog";
 import WhatsAppGateway from "../components/WhatsAppGateway";
 import { blocksInData, fmtKwacha } from "../../lib/billing";
 import { displayOptional } from "../../lib/occupancy";
-import { bedLabel, matchesStudentSearch, TENANT_STATUS_LABEL } from "../../lib/students";
+import { bedLabel, filterStudentAccounts, STUDENT_BILLING_FILTERS, STUDENT_TENANT_FILTERS, TENANT_STATUS_LABEL, type StudentBillingFilter, type StudentTenantFilter } from "../../lib/students";
 import { composeRentReminder, whatsappChatUrl } from "../../lib/whatsapp";
 import type { StudentAccountRow } from "../../lib/api/students";
 import { approveStudentApplication, listStudentApplications, rejectStudentApplication } from "../../lib/api";
 import { trackerSyncEvents } from "../../lib/trackerSync";
 import type { RentIncreaseMode, RentScope } from "../../lib/rent";
-import type { BedSpace, BillingStatus, BlockCode, OnboardStudentInput, RoomGender, StudentApplication, TenantStatus, UpdateStudentAccountInput } from "../../lib/types";
+import type { BedSpace, BlockCode, OnboardStudentInput, RoomGender, StudentApplication, TenantStatus, UpdateStudentAccountInput } from "../../lib/types";
 
 const billingBadge: Record<string, string> = {
   "Open Window": "bg-emerald-100 text-emerald-800",
@@ -70,13 +70,27 @@ const tenantStatusBadge: Record<TenantStatus, string> = {
   moved_out: "bg-slate-100 text-slate-600",
 };
 
-const BILLING_FILTERS: (BillingStatus | "all")[] = [
-  "all",
-  "Open Window",
-  "Paid / Secured",
-  "Grace Period",
-  "OVERDUE / UNPAID",
-];
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+        active ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
 export type EvictionResult = {
   fullName: string;
@@ -118,8 +132,8 @@ export default function StudentsView({
   const [search, setSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState<BlockCode | "all">("all");
   const blocks = useMemo(() => blocksInData(beds), [beds]);
-  const [billingFilter, setBillingFilter] = useState<BillingStatus | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<TenantStatus | "all">("active");
+  const [billingFilter, setBillingFilter] = useState<StudentBillingFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StudentTenantFilter>("active");
   const [genderFilter, setGenderFilter] = useState<RoomGender | "all">("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<StudentAccountRow | null>(null);
@@ -136,20 +150,35 @@ export default function StudentsView({
   const [evictError, setEvictError] = useState<string | null>(null);
 
   const filtered = useMemo(
-    () => students.filter((row) =>
-      matchesStudentSearch(row, search) &&
-      (blockFilter === "all" || row.block_code === blockFilter) &&
-      (billingFilter === "all" || row.billing_status === billingFilter) &&
-      (statusFilter === "all" || row.tenant_status === statusFilter) &&
-      (genderFilter === "all" || row.gender === genderFilter || row.room_gender === genderFilter),
-    ),
+    () => filterStudentAccounts(students, {
+      search,
+      block: blockFilter,
+      billing: billingFilter,
+      status: statusFilter,
+      gender: genderFilter,
+    }),
     [students, search, blockFilter, billingFilter, statusFilter, genderFilter],
   );
 
   const activeStudents = students.filter((row) => row.tenant_status === "active");
+  const paidCount = activeStudents.filter((row) => row.billing_status === "Paid / Secured").length;
   const overdue = activeStudents.filter((row) => row.billing_status === "OVERDUE / UNPAID");
   const totalOutstanding = activeStudents.reduce((sum, row) => sum + (row.total_balance ?? 0), 0);
   const removedCount = students.length - activeStudents.length;
+  const billingChipCounts = useMemo(() => {
+    const scoped = filterStudentAccounts(students, {
+      search,
+      block: blockFilter,
+      status: statusFilter,
+      gender: genderFilter,
+    });
+    return Object.fromEntries(
+      STUDENT_BILLING_FILTERS.map((chip) => [
+        chip.id,
+        chip.id === "all" ? scoped.length : scoped.filter((row) => row.billing_status === chip.id).length,
+      ]),
+    ) as Record<StudentBillingFilter, number>;
+  }, [students, search, blockFilter, statusFilter, genderFilter]);
   const filtersActive = search !== "" || blockFilter !== "all" || billingFilter !== "all" || statusFilter !== "active" || genderFilter !== "all";
 
   useEffect(() => {
@@ -158,7 +187,8 @@ export default function StudentsView({
     }
     if (openedFocusAt.current === focusNonce) return;
     openedFocusAt.current = focusNonce;
-    if (focusStudent.tenant_status !== "active") setStatusFilter("all");
+    setStatusFilter(focusStudent.tenant_status === "active" ? "active" : "removed");
+    setBillingFilter("all");
     setFormMode("edit");
     setFormStudent(focusStudent);
     setFormOpen(true);
@@ -250,10 +280,39 @@ export default function StudentsView({
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Active Students" value={activeStudents.length} icon={Users} />
-        <KpiCard label="Overdue" value={overdue.length} accent="text-red-600" icon={AlertTriangle} />
-        <KpiCard label="Outstanding" value={fmtKwacha(Math.round(totalOutstanding))} accent="text-amber-600" />
-        <KpiCard label="Removed" value={removedCount} accent="text-slate-500" icon={UserX} sub="Evicted or moved out" />
+        <KpiCard
+          label="Active Students"
+          value={activeStudents.length}
+          icon={Users}
+          selected={statusFilter === "active" && billingFilter === "all"}
+          onClick={() => { setStatusFilter("active"); setBillingFilter("all"); }}
+        />
+        <KpiCard
+          label="Paid"
+          value={paidCount}
+          accent="text-blue-700"
+          icon={Check}
+          selected={statusFilter === "active" && billingFilter === "Paid / Secured"}
+          onClick={() => { setStatusFilter("active"); setBillingFilter("Paid / Secured"); }}
+        />
+        <KpiCard
+          label="Overdue"
+          value={overdue.length}
+          accent="text-red-600"
+          icon={AlertTriangle}
+          sub={fmtKwacha(Math.round(totalOutstanding)) + " outstanding"}
+          selected={statusFilter === "active" && billingFilter === "OVERDUE / UNPAID"}
+          onClick={() => { setStatusFilter("active"); setBillingFilter("OVERDUE / UNPAID"); }}
+        />
+        <KpiCard
+          label="Removed"
+          value={removedCount}
+          accent="text-slate-500"
+          icon={UserX}
+          sub="Evicted or moved out"
+          selected={statusFilter === "removed"}
+          onClick={() => { setStatusFilter("removed"); setBillingFilter("all"); }}
+        />
       </div>
 
       <SectionCard
@@ -281,7 +340,7 @@ export default function StudentsView({
         }
       >
         <div className="p-5 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="relative sm:col-span-2">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
@@ -304,17 +363,6 @@ export default function StudentsView({
             </select>
 
             <select
-              value={billingFilter}
-              onChange={(e) => setBillingFilter(e.target.value as BillingStatus | "all")}
-              className={inputStyles}
-              aria-label="Filter by billing status"
-            >
-              {BILLING_FILTERS.map((status) => (
-                <option key={status} value={status}>{status === "all" ? "All billing statuses" : status}</option>
-              ))}
-            </select>
-
-            <select
               value={genderFilter}
               onChange={(e) => setGenderFilter(e.target.value as RoomGender | "all")}
               className={inputStyles}
@@ -326,29 +374,44 @@ export default function StudentsView({
             </select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {(["active", "evicted", "moved_out", "all"] as const).map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${statusFilter === status ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-              >
-                {status === "all" ? "All" : TENANT_STATUS_LABEL[status]}
-              </button>
-            ))}
-
-            <span className="ml-auto text-xs text-slate-500">
-              {filtered.length} of {students.length} student{students.length === 1 ? "" : "s"}
-            </span>
-
-            {filtersActive && (
-              <button
-                onClick={() => { setSearch(""); setBlockFilter("all"); setBillingFilter("all"); setStatusFilter("active"); setGenderFilter("all"); }}
-                className="text-xs font-semibold text-slate-500 hover:text-slate-900 inline-flex items-center gap-1 transition-colors"
-              >
-                <X size={12} /> Clear
-              </button>
-            )}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 w-16 shrink-0">Status</span>
+              {STUDENT_TENANT_FILTERS.map((chip) => (
+                <FilterChip
+                  key={chip.id}
+                  active={statusFilter === chip.id}
+                  onClick={() => setStatusFilter(chip.id)}
+                >
+                  {chip.label}
+                </FilterChip>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 w-16 shrink-0">Billing</span>
+              {STUDENT_BILLING_FILTERS.map((chip) => (
+                <FilterChip
+                  key={chip.id}
+                  active={billingFilter === chip.id}
+                  onClick={() => setBillingFilter(chip.id)}
+                >
+                  {chip.label}
+                  {billingChipCounts[chip.id] > 0 || chip.id === "all" ? ` (${billingChipCounts[chip.id]})` : ""}
+                </FilterChip>
+              ))}
+              <span className="ml-auto text-xs text-slate-500">
+                {filtered.length} of {students.length} student{students.length === 1 ? "" : "s"}
+              </span>
+              {filtersActive && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(""); setBlockFilter("all"); setBillingFilter("all"); setStatusFilter("active"); setGenderFilter("all"); }}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900 inline-flex items-center gap-1 transition-colors"
+                >
+                  <X size={12} /> Clear
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="border border-slate-100 rounded-xl">
