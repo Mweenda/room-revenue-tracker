@@ -39,6 +39,7 @@ import { useStudentInbox } from "../hooks/useStudentInbox";
 import { useLandlordInbox } from "../hooks/useLandlordInbox";
 import { LandlordNotificationBell } from "./components/LandlordNotificationBell";
 import {
+  findStudentAccountForNotification,
   landlordNotificationView,
   type LandlordNotification,
   type LandlordNotificationKind,
@@ -2550,7 +2551,13 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
     typeof window !== "undefined" && window.matchMedia(LANDLORD_RAIL_HOVER_QUERY).matches,
   );
   const railCollapseTimer = useRef<number | null>(null);
-  const [inboxRoute, setInboxRoute] = useState<{ kind: LandlordNotificationKind; at: number } | null>(null);
+  const [inboxRoute, setInboxRoute] = useState<{
+    kind: LandlordNotificationKind;
+    at: number;
+    tenantId: string | null;
+    bedSpaceId: string | null;
+    studentName?: string;
+  } | null>(null);
   const billingMonth = BILLING_MONTHS[now.getMonth()];
   const monthBillingRecords = billingRecords;
   const monthBillingMap = billingMap;
@@ -2572,7 +2579,13 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   }
 
   function goToInboxItem(item: LandlordNotification) {
-    setInboxRoute({ kind: item.kind, at: Date.now() });
+    setInboxRoute({
+      kind: item.kind,
+      at: Date.now(),
+      tenantId: item.tenantId,
+      bedSpaceId: item.bedSpaceId ?? item.metadata.bedSpace ?? null,
+      studentName: item.metadata.studentName,
+    });
     setView(landlordNotificationView(item));
     setSidebarOpen(false);
     void refreshData();
@@ -2723,7 +2736,26 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
             />
           )}
           {view === "utilities" && <UtilitiesView utilities={utilities} beds={beds} saveUtility={saveUtility} toggleSettled={toggleSettled} />}
-          {view === "students"  && <StudentsView students={students} beds={beds} canManage={canManage} onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }} updateStudentAccount={updateStudentAccount} evictStudent={evictStudent} applyRentIncrement={applyRentIncrement} onDataChanged={refreshData} />}
+          {view === "students"  && (
+            <StudentsView
+              key={`students-${inboxRoute?.kind ?? "default"}-${inboxRoute?.at ?? 0}`}
+              students={students}
+              beds={beds}
+              canManage={canManage}
+              onboardStudent={async (input) => { assertLandlord(landlord, "onboard a student"); return onboard(input); }}
+              updateStudentAccount={updateStudentAccount}
+              evictStudent={evictStudent}
+              applyRentIncrement={applyRentIncrement}
+              onDataChanged={refreshData}
+              focusStudent={inboxRoute?.kind === "rent_overdue"
+                ? findStudentAccountForNotification(students, {
+                    tenantId: inboxRoute.tenantId,
+                    bedSpaceId: inboxRoute.bedSpaceId,
+                    metadata: { studentName: inboxRoute.studentName },
+                  })
+                : null}
+            />
+          )}
           {view === "reports"   && (
             <Suspense fallback={<ChunkFallback label="Loading reports…" />}>
             <ReportsView

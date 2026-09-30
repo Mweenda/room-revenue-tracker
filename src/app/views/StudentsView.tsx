@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   BedDouble,
@@ -91,6 +91,7 @@ export default function StudentsView({
   evictStudent,
   applyRentIncrement,
   onDataChanged,
+  focusStudent,
 }: {
   students: StudentAccountRow[];
   beds: BedSpace[];
@@ -109,6 +110,7 @@ export default function StudentsView({
     effectiveDate: string;
   }) => Promise<ApplyRentIncrementResult>;
   onDataChanged?: () => void;
+  focusStudent?: StudentAccountRow | null;
 }) {
   const [search, setSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState<BlockCode | "all">("all");
@@ -122,6 +124,7 @@ export default function StudentsView({
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [formOpen, setFormOpen] = useState(false);
   const [formStudent, setFormStudent] = useState<StudentAccountRow | null>(null);
+  const openedFocusId = useRef<string | null>(null);
 
   const [evictTarget, setEvictTarget] = useState<StudentAccountRow | null>(null);
   const [evictReason, setEvictReason] = useState("");
@@ -145,6 +148,17 @@ export default function StudentsView({
   const totalOutstanding = activeStudents.reduce((sum, row) => sum + (row.total_balance ?? 0), 0);
   const removedCount = students.length - activeStudents.length;
   const filtersActive = search !== "" || blockFilter !== "all" || billingFilter !== "all" || statusFilter !== "active" || genderFilter !== "all";
+
+  useEffect(() => {
+    if (!focusStudent) {
+      openedFocusId.current = null;
+      return;
+    }
+    if (openedFocusId.current === focusStudent.id) return;
+    openedFocusId.current = focusStudent.id;
+    setDetail(focusStudent);
+    if (focusStudent.tenant_status !== "active") setStatusFilter("all");
+  }, [focusStudent]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((row) => selectedIds.has(row.id));
 

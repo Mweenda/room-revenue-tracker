@@ -77,6 +77,7 @@ function forBed(details: LandlordNotificationDetails): string {
 }
 
 export function landlordNotificationView(item: Pick<LandlordNotification, "kind" | "metadata">): LandlordView {
+  if (item.kind === "rent_overdue") return "students";
   const href = item.metadata.hrefView;
   if (
     href === "portal" ||
@@ -91,8 +92,6 @@ export function landlordNotificationView(item: Pick<LandlordNotification, "kind"
     return href;
   }
   switch (item.kind) {
-    case "rent_overdue":
-      return "revenue";
     case "payment_submitted":
     case "payment_verified":
       return "pay";
@@ -123,7 +122,7 @@ export function buildLandlordNotificationCopy(
           `${name}${atBed(details)} has an overdue rent balance of ${amount}.`,
           `Billing period: ${month}.`,
           days > 0 ? `It has been ${days} day${days === 1 ? "" : "s"} past the due date.` : "",
-          "Open Revenue to review this account.",
+          "Open the student account to review this balance.",
         ].filter(Boolean).join("\n\n"),
       };
     case "payment_submitted":
@@ -377,10 +376,23 @@ export function pageActionLabel(item: Pick<LandlordNotification, "kind" | "metad
     case "reports":
       return "Open maintenance";
     case "students":
-      return "Review application";
+      return item.kind === "rent_overdue" ? "View account" : "Review application";
     default:
       return "Open related page";
   }
+}
+
+export function findStudentAccountForNotification<T extends { id: string; bed_space_id: string | null; full_name: string }>(
+  students: T[],
+  item: Pick<LandlordNotification, "tenantId" | "bedSpaceId" | "metadata">,
+): T | null {
+  const bedId = item.bedSpaceId ?? item.metadata.bedSpace ?? null;
+  const name = item.metadata.studentName?.trim().toLowerCase();
+  return students.find((row) =>
+    (item.tenantId && row.id === item.tenantId) ||
+    (bedId && row.bed_space_id === bedId) ||
+    (!!name && row.full_name.trim().toLowerCase() === name),
+  ) ?? null;
 }
 
 function isHistoricalImportPayment(id: string): boolean {

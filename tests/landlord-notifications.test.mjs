@@ -16,6 +16,11 @@ test("overdue copy names the student, bed, and balance", () => {
   assert.match(copy.preview, /ANX-19-B/);
   assert.match(copy.preview, /K3,600/);
   assert.match(copy.body, /31 days/);
+  assert.match(copy.body, /student account/i);
+  assert.equal(
+    inbox.landlordNotificationView({ kind: "rent_overdue", metadata: { hrefView: "revenue" } }),
+    "students",
+  );
 });
 
 test("vacant names are not treated as a real tenant", () => {
@@ -160,6 +165,12 @@ test("contact lookup uses the billing phone for the related bed", () => {
   assert.equal(contact.phone, "260770838758");
   assert.equal(contact.name, "Nanga Obrien");
   assert.equal(inbox.pageActionLabel(item), "View account");
+  assert.equal(inbox.landlordNotificationView(item), "students");
+  const account = inbox.findStudentAccountForNotification(
+    [{ id: "t1", bed_space_id: "BBH-6-B", full_name: "Nanga Obrien" }],
+    item,
+  );
+  assert.equal(account?.id, "t1");
 });
 
 test("local inbox uses current overdue, pending, and open issues only", () => {
