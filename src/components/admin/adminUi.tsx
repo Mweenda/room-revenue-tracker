@@ -90,6 +90,6 @@ export function Modal({ title, subtitle, onClose, children, maxWidth = "max-w-lg
 }
 
 export const adminInput =
-  "w-full px-3.5 py-2.5 bg-white/90 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 shadow-sm transition-all duration-150 hover:border-indigo-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent";
+  "glass-field w-full px-3.5 py-2.5 bg-white/90 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent";
 
 export const adminLabel = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5";

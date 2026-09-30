@@ -5,9 +5,8 @@ import { Badge as ShadBadge } from "./ui/badge";
 
 /** Shared interactive treatment so every clickable surface reacts the same way. */
 export const HOVER_SURFACE =
-  "transition-all duration-200 hover:shadow-lg hover:border-slate-300 dark:hover:border-slate-500 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900";
-export const HOVER_ROW =
-  "transition-colors duration-150 hover:bg-slate-50/90 dark:hover:bg-slate-800/80";
+  "glass-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900";
+export const HOVER_ROW = "glass-row hover:bg-slate-50/90 dark:hover:bg-slate-800/80";
 export const GLASS_PANEL =
   "bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border border-white/50 dark:border-white/10 shadow-2xl";
 export const GLASS_SOFT =
@@ -77,7 +76,7 @@ export function NavCard({ title, description, icon: Icon, accent, onClick, foote
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
-      className={`cursor-pointer border-slate-200 shadow-sm gap-0 py-0 hover:-translate-y-0.5 ${HOVER_SURFACE}`}
+      className={`cursor-pointer border-slate-200 shadow-sm gap-0 py-0 ${HOVER_SURFACE}`}
     >
       <CardContent className="p-6 flex flex-col items-start gap-4">
         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${accent}`}>
@@ -97,18 +96,18 @@ export function NavCard({ title, description, icon: Icon, accent, onClick, foote
 }
 
 const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 hover:-translate-y-px";
+  "glass-hover inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2";
 
 export const buttonStyles = {
-  primary: `${PRIMARY_BUTTON} bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md focus-visible:ring-emerald-500`,
-  danger: `${PRIMARY_BUTTON} bg-red-600 text-white hover:bg-red-700 hover:shadow-md focus-visible:ring-red-500`,
-  neutral: `${PRIMARY_BUTTON} bg-slate-900 text-white hover:bg-slate-800 hover:shadow-md focus-visible:ring-slate-500`,
-  outline: `${PRIMARY_BUTTON} border border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 hover:bg-white hover:border-slate-400 hover:shadow-md focus-visible:ring-slate-400`,
-  subtle: `${PRIMARY_BUTTON} bg-slate-100 text-slate-700 hover:bg-slate-200 hover:shadow-sm focus-visible:ring-slate-400`,
+  primary: `${PRIMARY_BUTTON} bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-500`,
+  danger: `${PRIMARY_BUTTON} bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500`,
+  neutral: `${PRIMARY_BUTTON} bg-slate-900 text-white hover:bg-slate-800 focus-visible:ring-slate-500`,
+  outline: `${PRIMARY_BUTTON} border border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 hover:bg-white focus-visible:ring-slate-400`,
+  subtle: `${PRIMARY_BUTTON} bg-slate-100 text-slate-700 hover:bg-slate-200 focus-visible:ring-slate-400`,
 } as const;
 
 export const inputStyles =
-  "w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm bg-white/90 dark:bg-slate-800 dark:text-slate-100 shadow-sm transition-all duration-150 hover:border-emerald-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[40px] disabled:bg-slate-50 dark:disabled:bg-slate-800/60 disabled:text-slate-400";
+  "glass-field w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm bg-white/90 dark:bg-slate-800 dark:text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent min-h-[40px] disabled:bg-slate-50 dark:disabled:bg-slate-800/60 disabled:text-slate-400";
 
 export function ModalFrame({
   children,

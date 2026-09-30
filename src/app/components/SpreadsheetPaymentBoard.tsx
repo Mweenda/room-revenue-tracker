@@ -2,20 +2,12 @@ import { fmtKwacha } from "../../lib/billing";
 import { paymentWindowGroups, vacantBedRows, occupancyReport } from "../../lib/paymentTracking";
 import type { BillingRecord } from "../../lib/types";
 
-function formatEntryDate(value: string): string {
-  if (!value || value === "-") return "";
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  if (!match) return value;
-  return `${Number(match[2])}/${Number(match[3])}/${match[1]}`;
-}
-
 export default function SpreadsheetPaymentBoard({ billingRecords }: { billingRecords: BillingRecord[] }) {
   const occupancy = occupancyReport(billingRecords);
   const vacant = vacantBedRows(billingRecords);
   const windows = paymentWindowGroups(billingRecords);
   const early = windows.find((group) => group.window === "days-1-5");
   const late = windows.find((group) => group.window === "days-20-30");
-  const listed = [early, late].filter(Boolean);
 
   return (
     <div className="space-y-5">
@@ -104,47 +96,6 @@ export default function SpreadsheetPaymentBoard({ billingRecords }: { billingRec
             <MetricRow label="Window total" value={fmtKwacha((early?.expected ?? 0) + (late?.expected ?? 0))} />
           </section>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        {listed.map((group) => group && (
-          <section key={group.window} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <header className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-bold text-slate-900">{group.label}</h3>
-              <span className="text-sm font-mono font-bold text-cyan-800 bg-cyan-50 px-2.5 py-1 rounded-lg">{fmtKwacha(group.expected)}</span>
-            </header>
-            <div className="overflow-x-auto max-h-80">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wide sticky top-0">
-                  <tr>
-                    <th className="text-left px-4 py-2.5 font-semibold">Tenant Name</th>
-                    <th className="text-right px-3 py-2.5 font-semibold">Amount</th>
-                    <th className="text-right px-3 py-2.5 font-semibold">Balance</th>
-                    <th className="text-left px-4 py-2.5 font-semibold">Entry Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {group.rows.map((row) => (
-                    <tr key={row.billingId}>
-                      <td className="px-4 py-2 font-semibold text-slate-800">{row.tenantName}</td>
-                      <td className="px-3 py-2 text-right font-mono">{row.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-right font-mono text-slate-600">{row.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="px-4 py-2 text-slate-500">{formatEntryDate(row.entryDate)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-slate-50 font-bold border-t border-slate-200">
-                    <td className="px-4 py-2.5">Subtotal · {group.rows.length} students</td>
-                    <td className="px-3 py-2.5 text-right font-mono">{fmtKwacha(group.expected)}</td>
-                    <td className="px-3 py-2.5 text-right font-mono">{fmtKwacha(group.outstanding)}</td>
-                    <td />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </section>
-        ))}
       </div>
     </div>
   );
