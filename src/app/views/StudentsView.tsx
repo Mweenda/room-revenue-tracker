@@ -93,6 +93,7 @@ export default function StudentsView({
   applyRentIncrement,
   onDataChanged,
   focusStudent,
+  focusNonce = 0,
 }: {
   students: StudentAccountRow[];
   beds: BedSpace[];
@@ -112,6 +113,7 @@ export default function StudentsView({
   }) => Promise<ApplyRentIncrementResult>;
   onDataChanged?: () => void;
   focusStudent?: StudentAccountRow | null;
+  focusNonce?: number;
 }) {
   const [search, setSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState<BlockCode | "all">("all");
@@ -125,7 +127,7 @@ export default function StudentsView({
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [formOpen, setFormOpen] = useState(false);
   const [formStudent, setFormStudent] = useState<StudentAccountRow | null>(null);
-  const openedFocusId = useRef<string | null>(null);
+  const openedFocusAt = useRef<number>(0);
 
   const [evictTarget, setEvictTarget] = useState<StudentAccountRow | null>(null);
   const [evictReason, setEvictReason] = useState("");
@@ -151,15 +153,17 @@ export default function StudentsView({
   const filtersActive = search !== "" || blockFilter !== "all" || billingFilter !== "all" || statusFilter !== "active" || genderFilter !== "all";
 
   useEffect(() => {
-    if (!focusStudent) {
-      openedFocusId.current = null;
+    if (!focusStudent || !focusNonce) {
       return;
     }
-    if (openedFocusId.current === focusStudent.id) return;
-    openedFocusId.current = focusStudent.id;
-    setDetail(focusStudent);
+    if (openedFocusAt.current === focusNonce) return;
+    openedFocusAt.current = focusNonce;
     if (focusStudent.tenant_status !== "active") setStatusFilter("all");
-  }, [focusStudent]);
+    setFormMode("edit");
+    setFormStudent(focusStudent);
+    setFormOpen(true);
+    setDetail(null);
+  }, [focusStudent, focusNonce]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((row) => selectedIds.has(row.id));
 

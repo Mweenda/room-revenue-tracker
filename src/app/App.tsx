@@ -40,10 +40,12 @@ import { useLandlordInbox } from "../hooks/useLandlordInbox";
 import { LandlordNotificationBell } from "./components/LandlordNotificationBell";
 import {
   findStudentAccountForNotification,
+  inboxOpensStudentAccount,
   landlordNotificationView,
   type LandlordNotification,
   type LandlordNotificationKind,
 } from "../lib/landlordNotifications";
+import { shouldShowTrackerSplash } from "../lib/trackerSync";
 import { isStudentNativeShell, pinStudentShellLocation, shouldShowWelcomeAd, studentShellLocation } from "../lib/studentApp";
 import { vacantBedsForGender } from "../lib/studentOnboarding";
 import { landlordRailCompact, landlordRailSpacerClass, LANDLORD_RAIL_COLLAPSE_MS, LANDLORD_RAIL_HOVER_QUERY } from "../lib/landlordSidebar";
@@ -2588,7 +2590,13 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
     });
     setView(landlordNotificationView(item));
     setSidebarOpen(false);
-    void refreshData();
+    if (!inboxOpensStudentAccount(item.kind)) return;
+    const account = findStudentAccountForNotification(students, {
+      tenantId: item.tenantId,
+      bedSpaceId: item.bedSpaceId ?? item.metadata.bedSpace ?? null,
+      metadata: item.metadata,
+    });
+    if (!account) toast.error("Could not find that student account");
   }
 
   const viewTitles: Record<LandlordView, string> = {
@@ -2654,7 +2662,7 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
           {MAIN_NAV.map(({ id, label, icon: Icon }) => {
             const badge = id === "pay" ? pendingPay : id === "reports" ? openIssues : id === "revenue" ? overdueCount : 0;
             return (
-              <button key={id} type="button" title={label} onClick={() => { setView(id); setSidebarOpen(false); }}
+              <button key={id} type="button" title={label} onClick={() => { setView(id); setInboxRoute(null); setSidebarOpen(false); }}
                 className={`w-full flex items-center py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${compact ? "gap-3 px-4 lg:justify-center lg:px-0 lg:gap-0" : "gap-3 px-4"} ${view === id ? "bg-emerald-600 text-white shadow-sm" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
                 <span className="relative shrink-0">
                   <Icon size={16} className="transition-transform duration-150 group-hover:scale-110" />
@@ -2672,7 +2680,7 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
 
           <div className={`pt-4 pb-1 ${compact ? "lg:hidden" : ""}`}><p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2">Account</p></div>
           {BOTTOM_NAV.map(({ id, label, icon: Icon }) => (
-            <button key={id} type="button" title={label} onClick={() => { setView(id); setSidebarOpen(false); }}
+            <button key={id} type="button" title={label} onClick={() => { setView(id); setInboxRoute(null); setSidebarOpen(false); }}
               className={`w-full flex items-center py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 min-h-[44px] group ${compact ? "gap-3 px-4 lg:justify-center lg:px-0 lg:gap-0" : "gap-3 px-4"} ${view === id ? "bg-slate-700 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
               <Icon size={16} className="shrink-0" /><span className={compact ? "lg:hidden" : ""}>{label}</span>
             </button>
@@ -2681,8 +2689,8 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
 
         <div className={`pb-3 border-t border-slate-800 pt-3 ${compact ? "px-3 lg:px-2" : "px-3"}`}>
           <UserMenu name={landlord?.name ?? "Property Owner"} role={landlord?.role ?? "Property Owner"} onLogout={onLogout} dark compactDesktop={compact}
-            onProfile={() => { setView("profile"); setSidebarOpen(false); }}
-            onSettings={() => { setView("settings"); setSidebarOpen(false); }} />
+            onProfile={() => { setView("profile"); setInboxRoute(null); setSidebarOpen(false); }}
+            onSettings={() => { setView("settings"); setInboxRoute(null); setSidebarOpen(false); }} />
         </div>
       </aside>
 
@@ -2738,7 +2746,6 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
           {view === "utilities" && <UtilitiesView utilities={utilities} beds={beds} saveUtility={saveUtility} toggleSettled={toggleSettled} />}
           {view === "students"  && (
             <StudentsView
-              key={`students-${inboxRoute?.kind ?? "default"}-${inboxRoute?.at ?? 0}`}
               students={students}
               beds={beds}
               canManage={canManage}
@@ -2747,13 +2754,14 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
               evictStudent={evictStudent}
               applyRentIncrement={applyRentIncrement}
               onDataChanged={refreshData}
-              focusStudent={inboxRoute?.kind === "rent_overdue"
+              focusStudent={inboxRoute && inboxOpensStudentAccount(inboxRoute.kind)
                 ? findStudentAccountForNotification(students, {
                     tenantId: inboxRoute.tenantId,
                     bedSpaceId: inboxRoute.bedSpaceId,
                     metadata: { studentName: inboxRoute.studentName },
                   })
                 : null}
+              focusNonce={inboxRoute && inboxOpensStudentAccount(inboxRoute.kind) ? inboxRoute.at : 0}
             />
           )}
           {view === "reports"   && (
@@ -2971,6 +2979,16 @@ function AppRoutes() {
   const studentShell = isStudentShell();
   const screen: View = studentShell && view === "landing" ? "student-login" : view;
   const tracker = useTrackerData();
+  const hasLoadedTracker = useRef(false);
+  if (!tracker.loading) hasLoadedTracker.current = true;
+  if (
+    screen === "landing" ||
+    screen === "landlord-login" ||
+    screen === "student-login" ||
+    screen === "student-apply"
+  ) {
+    hasLoadedTracker.current = false;
+  }
 
   useEffect(() => {
     pinStudentShellLocation();
@@ -3018,7 +3036,7 @@ function AppRoutes() {
     );
   }
 
-  if (tracker.loading && screen !== "landing" && screen !== "student-login" && screen !== "student-apply" && screen !== "landlord-login" && screen !== "student-confirm" && screen !== "student-reset") {
+  if (shouldShowTrackerSplash(tracker.loading, hasLoadedTracker.current) && screen !== "landing" && screen !== "student-login" && screen !== "student-apply" && screen !== "landlord-login" && screen !== "student-confirm" && screen !== "student-reset") {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center space-y-2">

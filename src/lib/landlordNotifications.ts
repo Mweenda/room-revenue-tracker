@@ -367,6 +367,10 @@ export function composeLandlordWhatsApp(
   }
 }
 
+export function inboxOpensStudentAccount(kind: LandlordNotificationKind): boolean {
+  return kind === "rent_overdue";
+}
+
 export function pageActionLabel(item: Pick<LandlordNotification, "kind" | "metadata">): string {
   switch (landlordNotificationView(item)) {
     case "revenue":

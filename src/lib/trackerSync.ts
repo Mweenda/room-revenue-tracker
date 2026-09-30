@@ -11,6 +11,11 @@ export type TrackerRefreshReason = "realtime" | "rest";
 
 export const trackerSyncEvents = new EventTarget();
 
+/** Full-screen splash only on the first load so a later refresh cannot unmount the dashboard. */
+export function shouldShowTrackerSplash(loading: boolean, hasLoadedOnce: boolean): boolean {
+  return loading && !hasLoadedOnce;
+}
+
 export function emitTrackerTableChange(table: TrackerSyncTable | "*") {
   trackerSyncEvents.dispatchEvent(new CustomEvent("change", { detail: { table } }));
 }

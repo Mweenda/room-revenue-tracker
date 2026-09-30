@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const inbox = await import("../src/lib/landlordNotifications.ts");
 
@@ -166,6 +168,8 @@ test("contact lookup uses the billing phone for the related bed", () => {
   assert.equal(contact.name, "Nanga Obrien");
   assert.equal(inbox.pageActionLabel(item), "View account");
   assert.equal(inbox.landlordNotificationView(item), "students");
+  assert.equal(inbox.inboxOpensStudentAccount(item.kind), true);
+  assert.equal(inbox.inboxOpensStudentAccount("payment_submitted"), false);
   const account = inbox.findStudentAccountForNotification(
     [{ id: "t1", bed_space_id: "BBH-6-B", full_name: "Nanga Obrien" }],
     item,
@@ -226,6 +230,22 @@ test("local inbox uses current overdue, pending, and open issues only", () => {
   assert.equal(items.filter((item) => item.kind === "payment_verified").length, 0);
   assert.equal(items.find((item) => item.kind === "rent_overdue")?.metadata.studentName, "Nanga Obrien");
   assert.equal(items.filter((item) => item.metadata.studentName === "Adrian mulale").length, 0);
+});
+
+test("View account stays on Students and does not remount the dashboard after the first load", async () => {
+  const { shouldShowTrackerSplash } = await import("../src/lib/trackerSync.ts");
+  assert.equal(shouldShowTrackerSplash(true, false), true);
+  assert.equal(shouldShowTrackerSplash(true, true), false);
+  assert.equal(shouldShowTrackerSplash(false, true), false);
+
+  const app = readFileSync(join(process.cwd(), "src/app/App.tsx"), "utf8");
+  const goTo = app.slice(app.indexOf("function goToInboxItem"), app.indexOf("const viewTitles"));
+  assert.doesNotMatch(goTo, /refreshData/);
+  assert.match(goTo, /inboxOpensStudentAccount/);
+
+  const studentsView = readFileSync(join(process.cwd(), "src/app/views/StudentsView.tsx"), "utf8");
+  assert.match(studentsView, /setFormMode\("edit"\)/);
+  assert.match(studentsView, /setFormOpen\(true\)/);
 });
 
 test("unread rows sort above older read ones", () => {
