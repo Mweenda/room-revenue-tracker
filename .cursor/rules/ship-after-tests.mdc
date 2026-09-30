@@ -1,0 +1,15 @@
+---
+description: After a new feature and passing tests, always push GitHub, Supabase if backend, then deploy live.
+alwaysApply: true
+---
+
+# Ship after tests
+
+whenever we implement a new feature, and the tests pass, always push to github, and supabase if it involves the backend, then deploy to the live site.
+
+Follow `.cursor/skills/ship-after-tests/SKILL.md`. Do not wait to be asked to commit, push, or deploy after a green test run.
+
+- Verify: `npm run typecheck && npm test`
+- GitHub `dev` via HTTPS: `git push https://github.com/Mweenda/room-revenue-tracker.git HEAD:dev`
+- Backend (migrations / RPCs / Edge Functions): `npm run deploy:db` and function deploys as needed
+- Live: `npm run deploy:hosting` → https://room-revenue-tracker.web.app

@@ -16,7 +16,11 @@ supabase/.temp/
 Thumbs.db
 .idea/
 .vscode/
-.cursor/
+.cursor/**
+!.cursor/skills/
+!.cursor/skills/**
+!.cursor/rules/
+!.cursor/rules/**
 
 # Local agent metadata
 .agents/

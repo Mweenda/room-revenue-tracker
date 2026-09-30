@@ -12,6 +12,9 @@ export const GLASS_PANEL =
   "bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border border-white/50 dark:border-white/10 shadow-2xl";
 export const GLASS_SOFT =
   "bg-white/70 dark:bg-slate-900/65 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-lg";
+/** Frosted floating menu that lifts off the page with a specular edge and layered shadow. */
+export const GLASS_POPOVER =
+  "glass-popover rounded-3xl";
 export const OVERLAY_SCRIM =
   "absolute inset-0 bg-slate-950/50 backdrop-blur-sm";
 
