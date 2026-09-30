@@ -11,3 +11,8 @@ verify_jwt = false
 # onboard action verifies an admin JWT inside the handler via verifyAuth.
 [functions.admin]
 verify_jwt = false
+
+# OPTIONS preflight has no JWT. GET/POST still require a user JWT via
+# verifyAuth({ auth: "user" }) so RLS-scoped snapshots cannot be fetched anonymously.
+[functions.mcp-bridge]
+verify_jwt = false

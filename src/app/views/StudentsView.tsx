@@ -52,6 +52,7 @@ import { bedLabel, matchesStudentSearch, TENANT_STATUS_LABEL } from "../../lib/s
 import { composeRentReminder, whatsappChatUrl } from "../../lib/whatsapp";
 import type { StudentAccountRow } from "../../lib/api/students";
 import { approveStudentApplication, listStudentApplications, rejectStudentApplication } from "../../lib/api";
+import { trackerSyncEvents } from "../../lib/trackerSync";
 import type { RentIncreaseMode, RentScope } from "../../lib/rent";
 import type { BedSpace, BillingStatus, BlockCode, OnboardStudentInput, RoomGender, StudentApplication, TenantStatus, UpdateStudentAccountInput } from "../../lib/types";
 
@@ -720,6 +721,16 @@ function ApplicationsPanel({
       }
     })();
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const onChange = (event: Event) => {
+      const table = (event as CustomEvent<{ table?: string }>).detail?.table;
+      if (table && table !== "*" && table !== "student_applications") return;
+      void reload();
+    };
+    trackerSyncEvents.addEventListener("change", onChange);
+    return () => trackerSyncEvents.removeEventListener("change", onChange);
   }, []);
 
   const vacantForTarget = useMemo(() => {

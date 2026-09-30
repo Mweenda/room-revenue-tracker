@@ -16,7 +16,9 @@ import {
   assertUniqueActivePhone,
   vacantBillingPatch,
 } from "../lib/occupancy";
-import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
+import { getSupabase, getSupabaseConfig, isSupabaseConfigured } from "../lib/supabase";
+import { fetchTrackerFallback } from "../lib/mcpBridge";
+import { createTrackerSync, subscribeTrackerRealtime } from "../lib/trackerSync";
 import { inviteStudentToPortal, sendTenantNotification, sendWelcomeEmail } from "../lib/auth";
 import { deriveStudentAccounts, applyStudentAccountUpdate, applyManualVerifiedPayment, enrichStudentAccounts } from "../lib/students";
 import { applyOccupancyAdminEdit, type OccupancyAdminEditInput } from "../lib/occupancyBillingEdit";
@@ -80,20 +82,25 @@ export function useTrackerData() {
     isSupabaseConfigured ? "supabase" : "local",
   );
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     if (!isSupabaseConfigured) {
       setSource("local");
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    const silent = opts?.silent === true;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
-      try {
-        await api.reconcileAllOccupancy();
-      } catch {
-        // RPC may not be deployed yet; continue with fetch
+      if (!silent) {
+        try {
+          await api.reconcileAllOccupancy();
+        } catch {
+          // RPC may not be deployed yet; continue with fetch
+        }
       }
 
       const [bedsData, billingData, paymentsData, issuesData, utilitiesData] =
@@ -115,9 +122,10 @@ export function useTrackerData() {
         setRemoteStudents(await api.fetchStudentAccounts({ includeInactive: true }));
       } catch {
         // Tenant status columns may not be deployed yet; fall back to derived rows
-        setRemoteStudents(null);
+        if (!silent) setRemoteStudents(null);
       }
     } catch (err) {
+      if (silent) return;
       const message = err instanceof Error ? err.message : "Failed to load tracker data";
       setError(message);
       setRemoteStudents(null);
@@ -125,12 +133,13 @@ export function useTrackerData() {
       // transient fetch failure routed every subsequent write into React state
       // only, so the UI reported success while nothing reached the database.
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   // Data is fetched only for a signed-in session: every table is behind RLS, so
   // an anonymous fetch is a guaranteed failure rather than a useful request.
+  // Live updates: Realtime first, REST (then MCP JSON-RPC) if the socket lags.
   useEffect(() => {
     if (!isSupabaseConfigured) {
       setLoading(false);
@@ -139,8 +148,13 @@ export function useTrackerData() {
     const sb = getSupabase();
     if (!sb) return;
 
+    let stopSync: (() => void) | null = null;
+    const { url, anonKey } = getSupabaseConfig();
+
     const { data: subscription } = sb.auth.onAuthStateChange((event, session) => {
       if (event === "TOKEN_REFRESHED") return;
+      stopSync?.();
+      stopSync = null;
       if (session) {
         const auth = new URLSearchParams(window.location.search).get("auth");
         if (auth === "student-confirm" || auth === "student-reset") {
@@ -148,6 +162,25 @@ export function useTrackerData() {
           return;
         }
         void refresh();
+        if (url && anonKey) {
+          const sync = createTrackerSync({
+            subscribeRealtime: (onTable, onStatus) =>
+              subscribeTrackerRealtime(sb, { onTable, onStatus }),
+            fetchFallback: () =>
+              fetchTrackerFallback({
+                supabaseUrl: url,
+                anonKey,
+                getAccessToken: async () => {
+                  const { data } = await sb.auth.getSession();
+                  return data.session?.access_token ?? null;
+                },
+              }),
+            onRefresh: () => {
+              void refresh({ silent: true });
+            },
+          });
+          stopSync = () => sync.stop();
+        }
         return;
       }
       setLoading(false);
@@ -159,7 +192,10 @@ export function useTrackerData() {
       setRemoteStudents(null);
     });
 
-    return () => subscription.subscription.unsubscribe();
+    return () => {
+      stopSync?.();
+      subscription.subscription.unsubscribe();
+    };
   }, [refresh]);
 
   const now = useLiveDateTime();

@@ -5,7 +5,7 @@ import {
   fetchStudentNotifications,
   markStudentNotificationRead,
 } from "../lib/api";
-import { isSupabaseConfigured } from "../lib/supabase";
+import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 import {
   applyInboxMemory,
   deriveLocalInbox,
@@ -142,6 +142,36 @@ export function useStudentInbox(input: {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!input.tenantId || !isSupabaseConfigured) return;
+    const sb = getSupabase();
+    if (!sb) return;
+
+    const channel = sb
+      .channel("student-inbox")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "student_notifications" },
+        () => {
+          void fetchStudentNotifications()
+            .then((rows) => {
+              if (rows.length === 0) return;
+              setItems(sortInbox(applyInboxMemory(
+                rows,
+                readKeySet(READ_STORAGE_KEY),
+                readKeySet(DISMISS_STORAGE_KEY),
+              )));
+            })
+            .catch(() => undefined);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void sb.removeChannel(channel);
+    };
+  }, [input.tenantId]);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
