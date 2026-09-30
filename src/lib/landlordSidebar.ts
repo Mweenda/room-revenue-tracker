@@ -7,3 +7,8 @@ export const LANDLORD_RAIL_HOVER_QUERY = "(hover: hover) and (pointer: fine)";
 export function landlordRailCompact(pointerCanHover: boolean, hoverExpanded: boolean): boolean {
   return pointerCanHover && !hoverExpanded;
 }
+
+/** Keep the main column offset in sync with the rail so tiles stay clickable. */
+export function landlordRailSpacerClass(compact: boolean): string {
+  return compact ? "w-[4.5rem]" : "w-64";
+}

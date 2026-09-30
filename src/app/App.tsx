@@ -45,7 +45,7 @@ import {
 } from "../lib/landlordNotifications";
 import { isStudentNativeShell, pinStudentShellLocation, shouldShowWelcomeAd, studentShellLocation } from "../lib/studentApp";
 import { vacantBedsForGender } from "../lib/studentOnboarding";
-import { landlordRailCompact, LANDLORD_RAIL_COLLAPSE_MS, LANDLORD_RAIL_HOVER_QUERY } from "../lib/landlordSidebar";
+import { landlordRailCompact, landlordRailSpacerClass, LANDLORD_RAIL_COLLAPSE_MS, LANDLORD_RAIL_HOVER_QUERY } from "../lib/landlordSidebar";
 import { compactTitleVisible, headerCollapseProgress } from "../lib/studentPortalHeader";
 import { useStudentViewport } from "../hooks/useStudentViewport";
 import { lastVerifiedPayment, matchesPaymentSearch } from "../lib/paymentsEdit";
@@ -951,6 +951,16 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
     : [];
   const focusedCapacity = focusedRows.reduce((sum, row) => sum + row.current_rent, 0);
   const focusedBalance = focusedRows.reduce((sum, row) => sum + (isBillingVacant(row) ? 0 : row.total_balance), 0);
+  const overviewRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!statusFocus) return;
+    overviewRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [statusFocus]);
+
+  function openStatus(key: BillingStatus) {
+    setStatusFocus((current) => (current === key ? null : key));
+  }
 
   return (
     <div className="space-y-5">
@@ -958,12 +968,14 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
         {statusSummaryRows.map(({ key, label }) => {
           const s = billingStatusStyle[key];
           const records = groups[key];
+          const selected = statusFocus === key;
           return (
             <button
               key={key}
               type="button"
-              onClick={() => setStatusFocus(key)}
-              className={`rounded-xl border-l-4 ${s.border} ${s.bg} px-4 py-3.5 shadow-sm text-left ${HOVER_SURFACE}`}
+              aria-pressed={selected}
+              onClick={() => openStatus(key)}
+              className={`rounded-xl border-l-4 ${s.border} ${s.bg} px-4 py-3.5 shadow-sm text-left ${HOVER_SURFACE} ${selected ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
             >
               <p className={`text-[10px] font-bold uppercase tracking-wider ${s.text} mb-1 leading-tight`}>{label}</p>
               <p className={`text-2xl font-bold ${s.text}`}>{records.length}</p>
@@ -972,6 +984,90 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
           );
         })}
       </div>
+
+      {statusFocus && (
+        <section
+          ref={overviewRef}
+          className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+          aria-live="polite"
+        >
+          <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${billingStatusStyle[statusFocus].badge}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${billingStatusStyle[statusFocus].dot}`} />
+                {statusFocus}
+              </p>
+              <h3 className="text-base font-bold text-slate-900 mt-2">
+                {focusedRows.length} {focusedRows.length === 1 ? "bed" : "beds"} · {fmt(focusedCapacity)}
+              </h3>
+              <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{BILLING_STATUS_OVERVIEW[statusFocus]}</p>
+              {statusFocus !== "Vacant" && (
+                <p className="text-xs text-slate-500 mt-2 font-mono">Outstanding balance {fmt(focusedBalance)}</p>
+              )}
+            </div>
+            <button type="button" onClick={() => setStatusFocus(null)} className="text-slate-400 hover:text-slate-700 p-1 shrink-0" aria-label="Close overview">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="overflow-x-auto max-h-[min(24rem,50vh)] overflow-y-auto">
+            {focusedRows.length === 0 ? (
+              <p className="px-5 py-10 text-center text-sm text-slate-400">No beds in this status right now.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wide sticky top-0">
+                  <tr>
+                    <th className="text-left px-5 py-2.5 font-semibold">Bed</th>
+                    <th className="text-left px-3 py-2.5 font-semibold">{statusFocus === "Vacant" ? "Gender" : "Tenant"}</th>
+                    <th className="text-right px-3 py-2.5 font-semibold">Rent</th>
+                    {statusFocus !== "Vacant" && <th className="text-right px-5 py-2.5 font-semibold">Balance</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {focusedRows.map((row) => (
+                    <tr key={row.billing_id} className={HOVER_ROW}>
+                      <td className="px-5 py-2.5 font-mono text-xs font-bold text-slate-700">{row.billing_id}</td>
+                      <td className="px-3 py-2.5">
+                        {statusFocus === "Vacant" ? (
+                          <span className="text-slate-600">{row.room_gender}</span>
+                        ) : (
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 truncate">{displayOptional(row.tenant_name)}</p>
+                            <p className="text-[11px] text-slate-500 truncate">
+                              {displayOptional(row.phone_number)}
+                              {row.days_past_due > 0 ? ` · ${row.days_past_due}d past due` : ""}
+                            </p>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono">{fmt(row.current_rent)}</td>
+                      {statusFocus !== "Vacant" && (
+                        <td className={`px-5 py-2.5 text-right font-mono font-semibold ${row.total_balance > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                          {fmt(row.total_balance)}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div className="px-5 py-3 border-t border-slate-100 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={buttonStyles.primary}
+              onClick={() => {
+                setFilterStatus(statusFocus);
+                setStatusFocus(null);
+              }}
+            >
+              Show in roster
+            </button>
+            <button type="button" className={buttonStyles.outline} onClick={() => setStatusFocus(null)}>
+              Close
+            </button>
+          </div>
+        </section>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <KpiCard label="Full Capacity" value={fmt(grandTotal)} sub={`${monthRecords.length} bed spaces`} icon={BarChart3} />
@@ -1000,12 +1096,12 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
                       key={key}
                       role="button"
                       tabIndex={0}
-                      className={`${HOVER_ROW} cursor-pointer`}
-                      onClick={() => setStatusFocus(key)}
+                      className={`${HOVER_ROW} cursor-pointer ${statusFocus === key ? "bg-emerald-50/70" : ""}`}
+                      onClick={() => openStatus(key)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          setStatusFocus(key);
+                          openStatus(key);
                         }
                       }}
                     >
@@ -1178,86 +1274,6 @@ function RevenueView({ billingRecords, billingMonth }: { billingRecords: Billing
           })}
         </div>
       </SectionCard>
-
-      {statusFocus && (
-        <ModalFrame onClose={() => setStatusFocus(null)} className="max-w-2xl">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${billingStatusStyle[statusFocus].badge}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${billingStatusStyle[statusFocus].dot}`} />
-                {statusFocus}
-              </p>
-              <h3 className="text-base font-bold text-slate-900 mt-2">
-                {focusedRows.length} {focusedRows.length === 1 ? "bed" : "beds"} · {fmt(focusedCapacity)}
-              </h3>
-              <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{BILLING_STATUS_OVERVIEW[statusFocus]}</p>
-              {statusFocus !== "Vacant" && (
-                <p className="text-xs text-slate-500 mt-2 font-mono">Outstanding balance {fmt(focusedBalance)}</p>
-              )}
-            </div>
-            <button type="button" onClick={() => setStatusFocus(null)} className="text-slate-400 hover:text-slate-700 p-1 shrink-0" aria-label="Close">
-              <X size={18} />
-            </button>
-          </div>
-          <div className="overflow-y-auto flex-1">
-            {focusedRows.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-slate-400">No beds in this status right now.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wide sticky top-0">
-                  <tr>
-                    <th className="text-left px-5 py-2.5 font-semibold">Bed</th>
-                    <th className="text-left px-3 py-2.5 font-semibold">{statusFocus === "Vacant" ? "Gender" : "Tenant"}</th>
-                    <th className="text-right px-3 py-2.5 font-semibold">Rent</th>
-                    {statusFocus !== "Vacant" && <th className="text-right px-5 py-2.5 font-semibold">Balance</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {focusedRows.map((row) => (
-                    <tr key={row.billing_id} className={HOVER_ROW}>
-                      <td className="px-5 py-2.5 font-mono text-xs font-bold text-slate-700">{row.billing_id}</td>
-                      <td className="px-3 py-2.5">
-                        {statusFocus === "Vacant" ? (
-                          <span className="text-slate-600">{row.room_gender}</span>
-                        ) : (
-                          <div className="min-w-0">
-                            <p className="font-semibold text-slate-900 truncate">{displayOptional(row.tenant_name)}</p>
-                            <p className="text-[11px] text-slate-500 truncate">
-                              {displayOptional(row.phone_number)}
-                              {row.days_past_due > 0 ? ` · ${row.days_past_due}d past due` : ""}
-                            </p>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono">{fmt(row.current_rent)}</td>
-                      {statusFocus !== "Vacant" && (
-                        <td className={`px-5 py-2.5 text-right font-mono font-semibold ${row.total_balance > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                          {fmt(row.total_balance)}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-          <div className="px-5 py-3 border-t border-slate-100 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={buttonStyles.primary}
-              onClick={() => {
-                setFilterStatus(statusFocus);
-                setStatusFocus(null);
-              }}
-            >
-              Show in roster
-            </button>
-            <button type="button" className={buttonStyles.outline} onClick={() => setStatusFocus(null)}>
-              Close
-            </button>
-          </div>
-        </ModalFrame>
-      )}
     </div>
   );
 }
@@ -2601,7 +2617,7 @@ function LandlordDashboard({ beds, billingRecords, billingMap, payments, issues,
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-      <div className="hidden lg:block w-[4.5rem] shrink-0" aria-hidden />
+      <div className={`hidden lg:block shrink-0 motion-safe:transition-[width] motion-safe:duration-200 ${landlordRailSpacerClass(compact)}`} aria-hidden />
 
       <aside
         data-collapsed={compact ? "true" : "false"}

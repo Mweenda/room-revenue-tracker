@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge as ShadBadge } from "./ui/badge";
@@ -118,13 +119,28 @@ export function ModalFrame({
   onClose?: () => void;
   className?: string;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6">
-      <button type="button" className={OVERLAY_SCRIM} aria-label="Close dialog" onClick={onClose} />
-      <div className={`relative w-full ${GLASS_PANEL} rounded-2xl max-h-[min(92dvh,48rem)] overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-200 ${className ?? "max-w-md"}`}>
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3 sm:p-6">
+      <button type="button" className={`${OVERLAY_SCRIM} z-0`} aria-label="Close dialog" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={`relative z-10 w-full ${GLASS_PANEL} rounded-2xl max-h-[min(92dvh,48rem)] overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-200 ${className ?? "max-w-md"}`}
+      >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

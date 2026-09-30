@@ -13,6 +13,12 @@ test("touch and coarse pointers keep the full sidebar", () => {
   assert.equal(landlordRailCompact(false, true), false);
 });
 
+test("the content spacer matches the rail so status tiles stay clickable", async () => {
+  const { landlordRailSpacerClass } = await import("../src/lib/landlordSidebar.ts");
+  assert.equal(landlordRailSpacerClass(true), "w-[4.5rem]");
+  assert.equal(landlordRailSpacerClass(false), "w-64");
+});
+
 test("collapse is delayed so the cursor can leave a small gap", () => {
   assert.ok(LANDLORD_RAIL_COLLAPSE_MS >= 120);
   assert.ok(LANDLORD_RAIL_COLLAPSE_MS <= 300);
