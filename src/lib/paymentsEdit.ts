@@ -33,14 +33,15 @@ export function applyPaymentEdit(payment: Payment, input: PaymentEditInput): Pay
 export function lastVerifiedPayment(
   payments: Payment[],
   bedSpaceId: string,
-  studentName?: string | null,
+  _studentName?: string | null,
 ): Payment | null {
-  const name = studentName?.trim().toLowerCase();
-  const matches = payments.filter((payment) => {
-    if (payment.status !== "verified") return false;
-    if (payment.bedSpaceId === bedSpaceId) return true;
-    return Boolean(name && payment.studentName.trim().toLowerCase() === name);
-  });
+  // Receipts stay on the bed they were recorded against. Matching by student
+  // name across beds would prefill occupancy edits with a previous assignment's
+  // payment and save a duplicate verified receipt on the new bed.
+  void _studentName;
+  const matches = payments.filter(
+    (payment) => payment.status === "verified" && payment.bedSpaceId === bedSpaceId,
+  );
   matches.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
   return matches[0] ?? null;
 }

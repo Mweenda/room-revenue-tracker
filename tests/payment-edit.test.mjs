@@ -38,6 +38,15 @@ test('last verified payment is the most recent successful one', () => {
   assert.equal(last?.submittedAt, '2026-09-01');
 });
 
+test('last verified payment stays on the requested bed even when another bed has the same name', () => {
+  const moved = [
+    { id: 'p-old', studentName: 'Ada Lovelace', bedSpaceId: 'BBH-1-A', amount: 900, method: 'Cash', transactionRef: 'OLD', submittedAt: '2026-09-10', status: 'verified' },
+    { id: 'p-other', studentName: 'Ada Lovelace', bedSpaceId: 'BBH-2-B', amount: 400, method: 'Airtel', transactionRef: 'NEW', submittedAt: '2026-09-12', status: 'verified' },
+  ];
+  assert.equal(lastVerifiedPayment(moved, 'BBH-2-B', 'Ada Lovelace')?.id, 'p-other');
+  assert.equal(lastVerifiedPayment(moved, 'BBH-1-C', 'Ada Lovelace'), null);
+});
+
 test('payment queue search matches block and bed identifiers', () => {
   const rows = [
     { studentName: 'Ada Lovelace', bedSpaceId: 'BBH-1-A', transactionRef: 'AIR-1' },
