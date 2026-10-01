@@ -8,6 +8,7 @@
     "dev": "vite",
     "test": "node --import tsx --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm test && node scripts/verify-build.mjs",
     "deploy:db": "supabase db push --linked",
     "deploy:db:direct": "supabase db push --db-url \"$SUPABASE_DB_URL\"",
     "deploy:db:dry-run": "supabase db push --db-url \"$SUPABASE_DB_URL\" --dry-run",

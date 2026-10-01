@@ -1,3 +1,9 @@
+import { getSupabase } from './supabase';
+import { createAppCaller, invalidateAppCaller } from './trpc';
+import { normalizeEmail } from './email';
+
+export { normalizeEmail } from './email';
+
 const viteEnv = (typeof import.meta !== 'undefined' && (import.meta as any).env)
   ? (import.meta as any).env
   : (globalThis as any).__vite_env__ ?? {};
@@ -37,10 +43,6 @@ export interface TenantNotification {
   };
 }
 
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
 export interface AuthenticatedStudent {
   id: string;
   name: string;
@@ -75,7 +77,6 @@ function mapTenantRow(row: {
 }
 
 export async function fetchTenantByEmail(email: string) {
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) return null;
 
@@ -92,7 +93,6 @@ export async function fetchTenantByEmail(email: string) {
 }
 
 export async function linkTenantToAuthUser(email: string): Promise<AuthenticatedStudent | null> {
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) return null;
 
@@ -124,13 +124,11 @@ export async function linkTenantToAuthUser(email: string): Promise<Authenticated
  * lookup for deployments where migration 006 has not been applied yet.
  */
 export async function tenantExistsForEmail(email: string): Promise<boolean> {
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) return false;
 
   const normalized = normalizeEmail(email);
   try {
-    const { createAppCaller } = await import('./trpc');
     return await (await createAppCaller()).auth.tenantExists({ email: normalized });
   } catch {
     const tenant = await fetchTenantByEmail(normalized);
@@ -138,31 +136,7 @@ export async function tenantExistsForEmail(email: string): Promise<boolean> {
   }
 }
 
-export async function inviteStudentToPortal(email: string, _name: string): Promise<{ success: boolean; message: string }> {
-  const { getSupabase } = await import('./supabase');
-  const sb = getSupabase();
-  if (!sb) {
-    return { success: false, message: 'Database not configured, so no invite can be sent.' };
-  }
-
-  const tenant = await fetchTenantByEmail(email);
-  if (!tenant) {
-    return {
-      success: false,
-      message: 'No tenant profile exists for this email. The landlord must assign the bed space first.',
-    };
-  }
-
-  const sent = await sendTenantNotification({
-    tenantId: tenant.id,
-    type: 'welcome',
-    details: { bedSpace: tenant.bed_space_id },
-  });
-
-  return sent
-    ? { success: true, message: 'Invite sent. The student can create a password from the email and will land in their portal.' }
-    : { success: false, message: 'The tenant was saved, but the invite email could not be sent.' };
-}
+export { inviteStudentToPortal } from './invite';
 
 /**
  * Dispatches a tenant notification through the `send-email` Edge Function.
@@ -179,7 +153,6 @@ export async function sendTenantNotification(notification: TenantNotification): 
     return false;
   }
 
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) {
     console.warn(`Email service unavailable in offline mode (${type})`);
@@ -222,7 +195,6 @@ export async function sendWelcomeEmail(tenantId: string, bedSpace?: string): Pro
 // client-side code store, so a code cannot be read or forged in the browser.
 export async function requestOTP(data: OTPRequest): Promise<{ success: boolean; message: string }> {
   const normalizedEmail = normalizeEmail(data.email);
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) {
     return { success: false, message: 'Database not configured' };
@@ -251,7 +223,6 @@ export async function requestOTP(data: OTPRequest): Promise<{ success: boolean; 
 // Verify the one-time code with Supabase Auth.
 export async function verifyOTP(data: OTPVerification): Promise<{ success: boolean; message: string }> {
   const normalizedEmail = normalizeEmail(data.email);
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) {
     return { success: false, message: 'Database not configured' };
@@ -281,7 +252,6 @@ export async function verifyOTP(data: OTPVerification): Promise<{ success: boole
 }
 
 export async function signOutStudent(): Promise<void> {
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) return;
   const { error } = await sb.auth.signOut();
@@ -289,7 +259,6 @@ export async function signOutStudent(): Promise<void> {
 }
 
 export async function requestStudentPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) return { success: false, message: 'Database not configured' };
 
@@ -302,7 +271,6 @@ export async function requestStudentPasswordReset(email: string): Promise<{ succ
 }
 
 export async function fetchAuthenticatedStudent(): Promise<AuthenticatedStudent | null> {
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) return null;
 
@@ -362,7 +330,6 @@ async function resolveLandlordProfile(
   email: string,
 ): Promise<LandlordProfile | null> {
   try {
-    const { createAppCaller, invalidateAppCaller } = await import('./trpc');
     invalidateAppCaller();
     const profile = await (await createAppCaller()).auth.linkLandlordProfile();
     if (!profile) return null;
@@ -376,7 +343,6 @@ async function resolveLandlordProfile(
       bio: profile.bio,
     };
   } catch {
-    const { getSupabase } = await import('./supabase');
     const sb = getSupabase();
     if (!sb) return null;
     const { data: fallback, error: fallbackError } = await sb
@@ -392,7 +358,6 @@ async function resolveLandlordProfile(
 
 export async function landlordLogin(credentials: LoginCredentials): Promise<{ success: boolean; user?: any; message: string }> {
   const email = normalizeEmail(credentials.email);
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
 
   if (!sb) {
@@ -457,7 +422,6 @@ export async function landlordLogin(credentials: LoginCredentials): Promise<{ su
 // Student login (check if student exists in database)
 export async function studentLogin(credentials: LoginCredentials): Promise<{ success: boolean; student?: AuthenticatedStudent; message: string }> {
   try {
-    const { getSupabase } = await import('./supabase');
     const sb = getSupabase();
 
     if (!sb) {
@@ -494,7 +458,6 @@ export async function studentLogin(credentials: LoginCredentials): Promise<{ suc
 // no elevated view can be reached with it.
 export async function adminLogin(credentials: LoginCredentials): Promise<{ success: boolean; user?: any; message: string }> {
   const email = normalizeEmail(credentials.email);
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) {
     return { success: false, message: 'Database not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.' };
@@ -508,7 +471,6 @@ export async function adminLogin(credentials: LoginCredentials): Promise<{ succe
     return { success: false, message: 'Invalid admin email or password' };
   }
 
-  const { createAppCaller, invalidateAppCaller } = await import('./trpc');
   invalidateAppCaller();
   const isAdmin = await (await createAppCaller()).auth.isAdmin();
   if (!isAdmin) {
@@ -524,7 +486,6 @@ export async function adminLogin(credentials: LoginCredentials): Promise<{ succe
 }
 
 export async function adminSignOut(): Promise<void> {
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) return;
   const { error } = await sb.auth.signOut();
@@ -532,7 +493,6 @@ export async function adminSignOut(): Promise<void> {
 }
 
 export async function changeStudentPassword(currentPassword: string, newPassword: string): Promise<void> {
-  const { getSupabase } = await import('./supabase');
   const sb = getSupabase();
   if (!sb) throw new Error('Database not configured');
   const { data: session } = await sb.auth.getSession();

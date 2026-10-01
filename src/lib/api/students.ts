@@ -1,6 +1,6 @@
 import { dbFn } from "../../server/dbFn";
+import { inviteStudentToPortal } from "../invite";
 import { getSupabase } from "../supabase";
-import { inviteStudentToPortal } from "../auth";
 import { BILLING_MONTHS, getCurrentBillingMonth, type BillingMonth } from "../billing";
 import { occupancyBillingPatch, occupancyCoverageFromBilling } from "../occupancyBillingEdit";
 import type { TenantStatus, UpdateStudentAccountInput } from "../types";

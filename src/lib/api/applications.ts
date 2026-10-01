@@ -1,6 +1,6 @@
 import { dbFn } from "../../server/dbFn";
+import { inviteStudentToPortal } from "../invite";
 import { getSupabase } from "../supabase";
-import { inviteStudentToPortal } from "../auth";
 import type {
   RoomGender,
   StudentApplication,

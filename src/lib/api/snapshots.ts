@@ -1,11 +1,16 @@
 import { getSupabase } from "../supabase";
-import type { FinancialReport } from "../export/financialWorkbook";
 import type { BillingMonth } from "../billing";
 
 export async function persistFinancialSnapshot(input: {
   month: BillingMonth;
   year: number;
-  report: FinancialReport;
+  report: {
+    title: string;
+    periodLabel: string;
+    generatedAt: string;
+    summary: unknown;
+    sheets: unknown;
+  };
   actor?: string | null;
 }): Promise<void> {
   const sb = getSupabase();

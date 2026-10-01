@@ -4,6 +4,7 @@ import {
   summarizeBillingByStatus,
   type BillingMonth,
 } from "../billing";
+import { persistFinancialSnapshot } from "../api/snapshots";
 import { displayOptional, isVacantName } from "../occupancy";
 import type { BedSpace, BillingRecord, Payment, UtilityBlock } from "../types";
 
@@ -310,7 +311,6 @@ export async function exportFinancialWorkbook(input: FinancialReportInput): Prom
   URL.revokeObjectURL(url);
 
   try {
-    const { persistFinancialSnapshot } = await import("../api");
     await persistFinancialSnapshot({
       month: input.month,
       year: input.year,

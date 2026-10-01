@@ -1,5 +1,5 @@
 ---
-description: After a new feature and passing tests, always push GitHub, Supabase if backend, then deploy live.
+description: After a new feature, ship only when tests pass, the production build succeeds, and there is no chunking notice. Optimize chunks first, then GitHub, Supabase if backend, Firebase live.
 alwaysApply: true
 ---
 
@@ -9,7 +9,15 @@ whenever we implement a new feature, and the tests pass, always push to github, 
 
 Follow `.cursor/skills/ship-after-tests/SKILL.md`. Do not wait to be asked to commit, push, or deploy after a green test run.
 
-- Verify: `npm run typecheck && npm test`
+**Gate (all required before any push):**
+
+- Every test passed
+- Production build succeeded
+- Build log has no chunk-size warning, mixed static/dynamic import notice, or chunk-load error (those cause live-site delays)
+
+If a chunk notice appears, optimize (`manualChunks`, lazy routes) and re-run verify. Do not raise `chunkSizeWarningLimit` to hide it. Do not push GitHub, Supabase, or Firebase until verify is clean.
+
+- Verify: `npm run verify` (`typecheck && test && node scripts/verify-build.mjs`)
 - GitHub `dev` via HTTPS: `git push https://github.com/Mweenda/room-revenue-tracker.git HEAD:dev`
 - Backend (migrations / RPCs / Edge Functions): `npm run deploy:db` and function deploys as needed
 - Live: `npm run deploy:hosting` → https://room-revenue-tracker.web.app
