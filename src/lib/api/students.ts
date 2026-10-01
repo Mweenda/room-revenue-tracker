@@ -1,8 +1,7 @@
 import { dbFn } from "../../server/dbFn";
 import { getSupabase } from "../supabase";
 import { inviteStudentToPortal } from "../auth";
-import { BILLING_MONTHS, getCurrentBillingMonth, type BillingMonth } from "../billing";
-import { occupancyBillingPatch, occupancyCoverageFromBilling } from "../occupancyBillingEdit";
+import { applyStudentAccountBillingStatus, shouldApplyStudentBillingStatus } from "../students";
 import type { TenantStatus, UpdateStudentAccountInput } from "../types";
 import { mapBilling } from "./mappers";
 import { recordManualPayment } from "./payments";
@@ -218,7 +217,10 @@ export async function updateStudentAccount(input: UpdateStudentAccountInput): Pr
     });
   }
 
-  if (input.billingStatus) {
+  // Receipts already update the ledger via verify-payment. Re-applying the
+  // form's stale Status (still Overdue / Open Window) after a zeroing receipt
+  // would charge a fresh month of rent on top of the payment that just cleared it.
+  if (shouldApplyStudentBillingStatus(input)) {
     const { data: billingRow, error: billingError } = await sb
       .from("billing_records")
       .select("*")
@@ -226,26 +228,14 @@ export async function updateStudentAccount(input: UpdateStudentAccountInput): Pr
       .single();
     if (billingError) throw billingError;
     const billing = mapBilling(billingRow);
-    const coverage = occupancyCoverageFromBilling(billing);
-    const targetMonth = (BILLING_MONTHS as readonly string[]).includes(billing.target_month)
-      ? (billing.target_month as BillingMonth)
-      : getCurrentBillingMonth();
-    const patched = occupancyBillingPatch(billing, {
-      tenantId: input.tenantId,
+    const patched = applyStudentAccountBillingStatus(billing, input, {
       name,
       phone: input.phone,
       email: input.email,
       moveInDate: input.moveInDate,
       gender: input.gender,
-      bedId: row.bed_space_id,
       rentAmount: Number(row.rent_amount),
-      billingStatus: input.billingStatus,
-      targetMonth: input.billingStatus === "Paid / Secured" ? coverage.startMonth : targetMonth,
-      monthsCovered: input.billingStatus === "Paid / Secured" ? coverage.monthsCovered : 1,
-      totalBalance: billing.total_balance,
-      paymentDate: "",
-      paymentAmount: 0,
-      paymentMethod: "Cash",
+      bedId: row.bed_space_id,
     });
     const { error: patchError } = await sb
       .from("billing_records")

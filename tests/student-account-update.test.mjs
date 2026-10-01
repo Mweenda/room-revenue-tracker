@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { applyStudentAccountUpdate, applyManualVerifiedPayment, deriveStudentAccounts } =
-  await import('../src/lib/students.ts');
+const {
+  applyStudentAccountUpdate,
+  applyManualVerifiedPayment,
+  applyStudentAccountBillingStatus,
+  deriveStudentAccounts,
+  shouldApplyStudentBillingStatus,
+} = await import('../src/lib/students.ts');
 
 function student(id, name, email) {
   return { id, name, email, phone: '0970000000', nrc: '123456/78/9', moveInDate: '2026-02-01' };
@@ -152,4 +157,93 @@ test('editing billing status to paid clears the outstanding balance', () => {
   const billing = next.billingRecords.find((record) => record.billing_id === 'BBH-1-A');
   assert.equal(billing?.billing_status, 'Paid / Secured');
   assert.equal(billing?.total_balance, 0);
+});
+
+const ACCOUNT_EDIT = {
+  tenantId: 't1',
+  name: 'Ada Lovelace',
+  phone: '0970000000',
+  email: 'ada@example.com',
+  moveInDate: '2026-02-01',
+  bedSpaceId: 'BBH-1-A',
+  rentAmount: 900,
+};
+
+test('a receipt save ignores the stale status dropdown so the ledger is not reopened', () => {
+  assert.equal(shouldApplyStudentBillingStatus({
+    billingStatus: 'OVERDUE / UNPAID',
+    manualPayment: { amount: 450, submittedAt: '2026-09-11', method: 'Cash' },
+  }), false);
+  assert.equal(shouldApplyStudentBillingStatus({ billingStatus: 'Paid / Secured' }), true);
+  assert.equal(shouldApplyStudentBillingStatus({}), false);
+
+  const next = applyStudentAccountUpdate(BEDS, BILLING, {
+    ...ACCOUNT_EDIT,
+    billingStatus: 'OVERDUE / UNPAID',
+    manualPayment: { amount: 450, submittedAt: '2026-09-11', method: 'Cash' },
+  });
+  const beforeReceipt = next.billingRecords.find((record) => record.billing_id === 'BBH-1-A');
+  assert.equal(beforeReceipt?.total_balance, 450);
+
+  const paid = applyManualVerifiedPayment(next.billingRecords, [], {
+    bedSpaceId: 'BBH-1-A',
+    studentName: 'Ada Lovelace',
+    payment: { amount: 450, submittedAt: '2026-09-11', method: 'Cash', transactionRef: 'RCPT-2' },
+  });
+  const afterReceipt = paid.billingRecords.find((row) => row.billing_id === 'BBH-1-A');
+  assert.equal(afterReceipt?.total_balance, 0);
+  assert.equal(afterReceipt?.billing_status, 'Paid / Secured');
+});
+
+test('reapplying stale overdue status after a zeroing receipt would charge a fresh month', () => {
+  const paid = applyManualVerifiedPayment(BILLING, [], {
+    bedSpaceId: 'BBH-1-A',
+    studentName: 'Ada Lovelace',
+    payment: { amount: 450, submittedAt: '2026-09-11', method: 'Cash', transactionRef: 'RCPT-3' },
+  });
+  const cleared = paid.billingRecords.find((row) => row.billing_id === 'BBH-1-A');
+  assert.equal(cleared?.total_balance, 0);
+
+  const reopened = applyStudentAccountBillingStatus(cleared, {
+    ...ACCOUNT_EDIT,
+    billingStatus: 'OVERDUE / UNPAID',
+  }, {
+    name: 'Ada Lovelace',
+    phone: '0970000000',
+    email: 'ada@example.com',
+    moveInDate: '2026-02-01',
+    rentAmount: 900,
+    bedId: 'BBH-1-A',
+  });
+  assert.equal(reopened.total_balance, 900);
+  assert.equal(reopened.billing_status, 'OVERDUE / UNPAID');
+});
+
+test('open-window status after a full receipt would also restore monthly rent', () => {
+  const windowBilling = [{
+    ...BILLING[0],
+    total_balance: 900,
+    days_past_due: 0,
+    billing_status: 'Open Window',
+    target_month: 'Sep',
+  }];
+  const paid = applyManualVerifiedPayment(windowBilling, [], {
+    bedSpaceId: 'BBH-1-A',
+    studentName: 'Ada Lovelace',
+    payment: { amount: 900, submittedAt: '2026-09-11', method: 'Cash', transactionRef: 'RCPT-4' },
+  });
+  const cleared = paid.billingRecords.find((row) => row.billing_id === 'BBH-1-A');
+  const reopened = applyStudentAccountBillingStatus(cleared, {
+    ...ACCOUNT_EDIT,
+    billingStatus: 'Open Window',
+  }, {
+    name: 'Ada Lovelace',
+    phone: '0970000000',
+    email: 'ada@example.com',
+    moveInDate: '2026-02-01',
+    rentAmount: 900,
+    bedId: 'BBH-1-A',
+  });
+  assert.equal(cleared?.total_balance, 0);
+  assert.equal(reopened.total_balance, 900);
 });
