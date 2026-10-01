@@ -99,11 +99,10 @@ export function monthsToCharge(
   if (!last) return 0;
   const behind = monthsFromTo(last, currentMonth);
   if (behind === 0) return 0;
-  if (totalBalance <= 0) {
-    const ahead = monthsFromTo(currentMonth, last);
-    // Paid in advance: last charged month is current or still in the future.
-    if (ahead <= behind) return 0;
-  }
+  const ahead = monthsFromTo(currentMonth, last);
+  // Month names wrap. A last-charged month closer forward than backward is the
+  // next cycle (Oct unpaid in Sep), not 11 months of arrears.
+  if (ahead > 0 && ahead <= behind) return 0;
   return behind;
 }
 

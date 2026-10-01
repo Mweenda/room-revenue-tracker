@@ -98,6 +98,22 @@ function monthsCoveredValue(raw: number): number {
   return months;
 }
 
+/**
+ * Unpaid `target_month` is the oldest open month. Month names have no year, so
+ * "Oct" in September is next month, not last October. Writing the future name
+ * makes `roll_billing_cycle` treat the student as 11 months in arrears.
+ */
+export function unpaidLedgerTargetMonth(
+  targetMonth: string,
+  currentMonth: BillingMonth,
+): BillingMonth {
+  if (!(BILLING_MONTHS as readonly string[]).includes(targetMonth)) return currentMonth;
+  const ahead = monthsFromTo(currentMonth, targetMonth);
+  const behind = monthsFromTo(targetMonth, currentMonth);
+  if (ahead > 0 && ahead <= behind) return currentMonth;
+  return targetMonth as BillingMonth;
+}
+
 export function occupancyBillingPatch(
   record: BillingRecord,
   input: OccupancyAdminEditInput,
@@ -121,10 +137,10 @@ export function occupancyBillingPatch(
   } else if (input.billingStatus === "OVERDUE / UNPAID") {
     const requested = input.totalBalance;
     totalBalance = requested != null && requested > 0 ? requested : Math.max(record.total_balance, rent);
-    targetMonth = input.targetMonth;
+    targetMonth = unpaidLedgerTargetMonth(input.targetMonth, currentMonth);
   } else {
     totalBalance = input.totalBalance != null && input.totalBalance > 0 ? input.totalBalance : rent;
-    targetMonth = input.targetMonth;
+    targetMonth = unpaidLedgerTargetMonth(input.targetMonth, currentMonth);
   }
 
   let daysPastDue = getDaysPastDue(targetMonth, getCurrentYear(), today, totalBalance > 0);

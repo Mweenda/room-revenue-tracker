@@ -160,3 +160,45 @@ test("prepaid coverage infers how many months are secured from the last prepaid 
   assert.equal(coverage.monthsCovered, 3);
   assert.equal(coverage.startMonth, "Sep");
 });
+
+test("open-window target of next month stays this month so the roll cannot add 11 months of rent", () => {
+  const next = save({
+    billingStatus: "Open Window",
+    targetMonth: "Oct",
+    totalBalance: 900,
+    paymentDate: "",
+    paymentAmount: 0,
+  });
+  const billing = next.billingRecords.find((row) => row.billing_id === "UPV-1-A");
+  assert.equal(billing?.target_month, "Sep");
+  assert.equal(billing?.total_balance, 900);
+  assert.equal(billing?.days_past_due, 0);
+  assert.equal(billing?.billing_status, "Open Window");
+});
+
+test("overdue with a future target month does not encode last-year arrears", () => {
+  const next = save({
+    billingStatus: "OVERDUE / UNPAID",
+    targetMonth: "Oct",
+    totalBalance: 900,
+    paymentDate: "2026-09-05",
+    paymentAmount: 900,
+  });
+  const billing = next.billingRecords.find((row) => row.billing_id === "UPV-1-A");
+  assert.equal(billing?.target_month, "Sep");
+  assert.equal(billing?.total_balance, 900);
+  assert.ok((billing?.days_past_due ?? 0) > 5);
+});
+
+test("an unpaid past target month is kept so real arrears still start at the oldest open month", () => {
+  const next = save({
+    billingStatus: "OVERDUE / UNPAID",
+    targetMonth: "Jul",
+    totalBalance: 1800,
+    paymentDate: "2026-09-05",
+    paymentAmount: 900,
+  });
+  const billing = next.billingRecords.find((row) => row.billing_id === "UPV-1-A");
+  assert.equal(billing?.target_month, "Jul");
+  assert.equal(billing?.total_balance, 1800);
+});

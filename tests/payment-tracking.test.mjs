@@ -38,6 +38,34 @@ test("prepaid future months are not charged again", () => {
   assert.equal(monthsToCharge("Oct", "Oct", 0, 900), 0);
 });
 
+test("unpaid future month names do not wrap into 11 months of rent", () => {
+  assert.equal(monthsToCharge("Oct", "Sep", 900, 900), 0);
+  assert.equal(monthsToCharge("Nov", "Sep", 1800, 900), 0);
+  const rolled = rollBillingRecord(
+    {
+      billing_id: "UPV-1-A",
+      house_block: "UPV",
+      room_number: "1",
+      bed_space: "A",
+      room_gender: "Female",
+      tenant_name: "Maika Nengo",
+      phone_number: "0977000000",
+      entry_date: "2026-02-01",
+      current_rent: 900,
+      target_month: "Oct",
+      accumulated_total: 900,
+      total_balance: 900,
+      days_past_due: 0,
+      billing_status: "Open Window",
+    },
+    "Sep",
+    new Date("2026-09-21T08:00:00+02:00"),
+  );
+  assert.equal(rolled.total_balance, 900);
+  assert.equal(rolled.target_month, "Oct");
+  assert.equal(rolled.accumulated_total, 900);
+});
+
 test("a paid-up student is billed again when the next month starts", () => {
   assert.equal(monthsToCharge("Sep", "Oct", 0, 900), 1);
   const rolled = rollBillingRecord(
