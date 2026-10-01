@@ -4,6 +4,10 @@ import assert from 'node:assert/strict';
 const {
   normalizeWhatsAppPhone,
   whatsappChatUrl,
+  whatsappBroadcastUrl,
+  formatWhatsAppNumberList,
+  composeBulkRentReminder,
+  resolveBulkReminderText,
   composeRentReminder,
   studentsForWhatsAppReminder,
 } = await import('../src/lib/whatsapp.ts');
@@ -34,6 +38,28 @@ test('reminder copy names the student, bed, balance and grace', () => {
   assert.match(text, /BBH 1A/);
   assert.match(text, /K900/);
   assert.match(text, /overdue/i);
+});
+
+test('bulk reminder is one shared message and a phone-less WhatsApp URL', () => {
+  const text = composeBulkRentReminder({ dueDate: 'the 1st of the month' });
+  assert.match(text, /outstanding balance/i);
+  assert.doesNotMatch(text, /Hi Ada/);
+  const url = whatsappBroadcastUrl(text);
+  assert.equal(url.startsWith('https://wa.me/?text='), true);
+  assert.equal(decodeURIComponent(new URL(url).searchParams.get('text')), text);
+  assert.equal(formatWhatsAppNumberList(['0977000002', '+260 977 000 003', '']), '260977000002, 260977000003');
+  assert.match(resolveBulkReminderText('Pay now {name} in {bed}'), /Pay now there in your bed space/);
+});
+
+test('the Students WhatsApp gateway sends one reminder to the whole owing list', async () => {
+  const { readFileSync } = await import('node:fs');
+  const gateway = readFileSync(new URL('../src/app/components/WhatsAppGateway.tsx', import.meta.url), 'utf8');
+  const studentsView = readFileSync(new URL('../src/app/views/StudentsView.tsx', import.meta.url), 'utf8');
+  assert.match(gateway, /Send to all \$\{recipients\.length\}/);
+  assert.match(gateway, /whatsappBroadcastUrl/);
+  assert.match(gateway, /New broadcast/);
+  assert.match(studentsView, /preferredFilter/);
+  assert.match(studentsView, /past_grace/);
 });
 
 test('WhatsApp targeting follows the current student filter and 5-day grace', () => {

@@ -29,6 +29,40 @@ export function whatsappChatUrl(phone: string, text: string): string {
   return `https://wa.me/${intl}?text=${encodeURIComponent(text)}`;
 }
 
+/** Opens WhatsApp with a pre-filled message so the landlord can pick many contacts at once. */
+export function whatsappBroadcastUrl(text: string): string {
+  const body = text.trim();
+  if (!body) throw new Error("Write a reminder before sending");
+  return `https://wa.me/?text=${encodeURIComponent(body)}`;
+}
+
+export function formatWhatsAppNumberList(phones: Array<string | null | undefined>): string {
+  return phones
+    .map((phone) => normalizeWhatsAppPhone(phone))
+    .filter((phone): phone is string => Boolean(phone))
+    .join(", ");
+}
+
+export function composeBulkRentReminder(input?: { dueDate?: string | null }): string {
+  return [
+    "Hi,",
+    "",
+    "This is a rent reminder from your landlord. Your account still has an outstanding balance.",
+    `Due date: ${input?.dueDate?.trim() || "the 1st of the month"}`,
+    "",
+    "Please submit payment proof in the student portal or reply here once paid.",
+    "— Room Revenue Tracker",
+  ].join("\n");
+}
+
+export function resolveBulkReminderText(customMessage: string, dueDate?: string | null): string {
+  const custom = customMessage.trim();
+  if (!custom) return composeBulkRentReminder({ dueDate });
+  return custom
+    .replaceAll("{name}", "there")
+    .replaceAll("{bed}", "your bed space");
+}
+
 export function composeRentReminder(input: {
   name: string;
   bedLabel: string;

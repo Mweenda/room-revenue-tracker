@@ -319,7 +319,17 @@ export default function StudentsView({
         title="Students"
         action={
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            <WhatsAppGateway students={filtered} selectedIds={selectedIds} />
+            <WhatsAppGateway
+              students={filtered}
+              selectedIds={selectedIds}
+              preferredFilter={
+                selectedIds.size > 0
+                  ? "selected"
+                  : billingFilter === "OVERDUE / UNPAID"
+                    ? "past_grace"
+                    : "unpaid"
+              }
+            />
             <button
               onClick={openCreate}
               disabled={!canManage}
