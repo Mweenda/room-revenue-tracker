@@ -152,6 +152,21 @@ test("a bed with no receipt can record one verified payment without duplicating 
   assert.equal(corrected.payments[0].submittedAt, "2026-09-03");
 });
 
+test("occupancy cannot mark 8 months paid because the roll would treat April as arrears", () => {
+  assert.throws(
+    () => save({ monthsCovered: 8, paymentAmount: 7200 }),
+    /6 months|cannot exceed 6/i,
+  );
+});
+
+test("occupancy six-month prepaid stays inside the month-name horizon", () => {
+  const next = save({ monthsCovered: 6, paymentAmount: 5400 });
+  const billing = next.billingRecords.find((row) => row.billing_id === "UPV-1-A");
+  assert.equal(billing?.total_balance, 0);
+  assert.equal(billing?.target_month, "Feb");
+  assert.equal(billing?.billing_status, "Paid / Secured");
+});
+
 test("prepaid coverage infers how many months are secured from the last prepaid month", () => {
   const coverage = occupancyCoverageFromBilling(
     { ...BILLING[0], target_month: "Nov", total_balance: 0, billing_status: "Paid / Secured" },

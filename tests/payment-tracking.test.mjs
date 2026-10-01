@@ -66,6 +66,55 @@ test("a paid-up student is billed again when the next month starts", () => {
   assert.equal(rolled.days_past_due, 0);
 });
 
+test("six months prepaid stays paid and is not rolled as arrears", () => {
+  const prepaid = applyPaymentToLedger({
+    totalBalance: 900,
+    currentRent: 900,
+    targetMonth: "Sep",
+    amount: 6300,
+    currentMonth: "Sep",
+  });
+  assert.equal(prepaid.totalBalance, 0);
+  assert.equal(prepaid.targetMonth, "Mar");
+  assert.equal(monthsToCharge(prepaid.targetMonth, "Sep", 0, 900), 0);
+});
+
+test("eight months prepaid is rejected because the next roll would add five months of rent", () => {
+  assert.equal(monthsToCharge("Apr", "Sep", 0, 900), 5);
+  assert.throws(
+    () => applyPaymentToLedger({
+      totalBalance: 900,
+      currentRent: 900,
+      targetMonth: "Sep",
+      amount: 7200,
+      currentMonth: "Sep",
+    }),
+    /6 months/,
+  );
+  const rolled = rollBillingRecord(
+    {
+      billing_id: "UPV-1-A",
+      house_block: "UPV",
+      room_number: "1",
+      bed_space: "A",
+      room_gender: "Female",
+      tenant_name: "Maika Nengo",
+      phone_number: "0977000000",
+      entry_date: "2026-02-01",
+      current_rent: 900,
+      target_month: "Apr",
+      accumulated_total: 7200,
+      total_balance: 0,
+      days_past_due: 0,
+      billing_status: "Paid / Secured",
+    },
+    "Sep",
+    new Date("2026-09-23T08:00:00+02:00"),
+  );
+  assert.equal(rolled.total_balance, 4500);
+  assert.equal(rolled.target_month, "May");
+});
+
 test("advance payment covers future months instead of billing them again", () => {
   const prepaid = applyPaymentToLedger({
     totalBalance: 900,
