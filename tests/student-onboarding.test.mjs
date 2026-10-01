@@ -8,6 +8,7 @@ const {
   validateStudentOnboarding,
   nextOnboardingStep,
 } = await import('../src/lib/studentOnboarding.ts');
+const { applyOnboardingBedMove, occupancyBillingCarry } = await import('../src/lib/occupancy.ts');
 
 const beds = [
   { id: 'BBH-1-A', blockCode: 'BBH', roomNumber: 1, bedLetter: 'A', identifier: 'BBH-1-A', status: 'vacant', rentAmount: 900, roomGender: 'Male' },
@@ -76,4 +77,73 @@ test('onboarding walks gender → bed → personal info → password', () => {
     password: 'short',
     confirmPassword: 'short',
   }).error ?? '', /6/);
+});
+
+test('onboarding may choose any vacant bed of the assigned gender, not only the landlord bed', () => {
+  const female = vacantBedsForGender(beds, 'Female', 'BBH-7-B');
+  assert.equal(validateStudentOnboarding({
+    step: 'bed',
+    gender: 'Female',
+    bedId: 'BBH-7-A',
+    beds,
+    assignedBedId: 'BBH-7-B',
+  }).ok, true);
+  assert.deepEqual(female.map((bed) => bed.id).sort(), ['BBH-7-A', 'BBH-7-B']);
+});
+
+test('switching beds during onboarding carries the outstanding ledger onto the chosen bed', () => {
+  const assigned = {
+    billing_id: 'BBH-7-B',
+    house_block: 'BBH',
+    room_number: '7',
+    bed_space: 'B',
+    room_gender: 'Female',
+    tenant_name: 'Ada Lovelace',
+    phone_number: '0970000000',
+    entry_date: '2026-02-01',
+    current_rent: 900,
+    target_month: 'Sep',
+    accumulated_total: 1800,
+    total_balance: 900,
+    days_past_due: 0,
+    billing_status: 'Open Window',
+  };
+  const vacant = {
+    billing_id: 'BBH-7-A',
+    house_block: 'BBH',
+    room_number: '7',
+    bed_space: 'A',
+    room_gender: 'Female',
+    tenant_name: '',
+    phone_number: '',
+    entry_date: '',
+    current_rent: 850,
+    target_month: '',
+    accumulated_total: 0,
+    total_balance: 0,
+    days_past_due: 0,
+    billing_status: 'Vacant',
+  };
+
+  const next = applyOnboardingBedMove(
+    assigned,
+    vacant,
+    { name: 'Ada Lovelace', phone: '0970000000', moveInDate: '2026-02-01' },
+    { blockCode: 'BBH', roomNumber: 7, bedLetter: 'A', rentAmount: 850, roomGender: 'Female' },
+  );
+
+  assert.equal(next.vacated.billing_status, 'Vacant');
+  assert.equal(next.vacated.total_balance, 0);
+  assert.equal(next.vacated.accumulated_total, 0);
+  assert.equal(next.occupied.tenant_name, 'Ada Lovelace');
+  assert.equal(next.occupied.current_rent, 850);
+  assert.equal(next.occupied.total_balance, 900);
+  assert.equal(next.occupied.accumulated_total, 1800);
+  assert.equal(next.occupied.target_month, 'Sep');
+  assert.deepEqual(occupancyBillingCarry(assigned), {
+    total_balance: 900,
+    accumulated_total: 1800,
+    days_past_due: 0,
+    target_month: 'Sep',
+  });
 });
