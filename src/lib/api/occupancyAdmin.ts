@@ -60,26 +60,9 @@ export async function saveOccupancyAdmin(input: OccupancyAdminEditInput) {
   );
   const patched = next.billingRecords[0] as BillingRecord;
 
-  const { error: billingUpdateError } = await sb
-    .from("billing_records")
-    .update({
-      tenant_name: patched.tenant_name,
-      phone_number: patched.phone_number || null,
-      entry_date: patched.entry_date || null,
-      current_rent: patched.current_rent,
-      total_balance: patched.total_balance,
-      target_month: patched.target_month,
-      days_past_due: patched.days_past_due,
-    })
-    .eq("billing_id", input.bedId);
-  if (billingUpdateError) throw billingUpdateError;
-
-  const { error: rentError } = await sb
-    .from("bed_spaces")
-    .update({ rent_amount: patched.current_rent })
-    .eq("id", input.bedId);
-  if (rentError) throw rentError;
-
+  // Receipt first, occupancy ledger last. Inserting status=verified fires
+  // apply_verified_payment, which treats an already-zeroed balance as extra
+  // prepaid months (one month paid → target jumps an extra month).
   if (next.paymentAction === "update" && next.payment) {
     await updatePayment({
       id: next.payment.id,
@@ -105,6 +88,26 @@ export async function saveOccupancyAdmin(input: OccupancyAdminEditInput) {
     });
     if (insertError) throw insertError;
   }
+
+  const { error: rentError } = await sb
+    .from("bed_spaces")
+    .update({ rent_amount: patched.current_rent })
+    .eq("id", input.bedId);
+  if (rentError) throw rentError;
+
+  const { error: billingUpdateError } = await sb
+    .from("billing_records")
+    .update({
+      tenant_name: patched.tenant_name,
+      phone_number: patched.phone_number || null,
+      entry_date: patched.entry_date || null,
+      current_rent: patched.current_rent,
+      total_balance: patched.total_balance,
+      target_month: patched.target_month,
+      days_past_due: patched.days_past_due,
+    })
+    .eq("billing_id", input.bedId);
+  if (billingUpdateError) throw billingUpdateError;
 
   return {
     paymentAction: next.paymentAction,
