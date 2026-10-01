@@ -38,6 +38,16 @@ test('last verified payment is the most recent successful one', () => {
   assert.equal(last?.submittedAt, '2026-09-01');
 });
 
+test('last verified payment on a reused bed ignores a previous occupant', () => {
+  const mixed = [
+    { id: 'p-old', studentName: 'Grace Bwalya', bedSpaceId: 'BBH-1-A', amount: 900, method: 'Cash', transactionRef: 'old', submittedAt: '2026-02-01', status: 'verified' },
+    ...payments,
+  ];
+  const last = lastVerifiedPayment(mixed, 'BBH-1-A', 'Ada Lovelace');
+  assert.equal(last?.id, 'p3');
+  assert.equal(lastVerifiedPayment(mixed, 'BBH-1-A', 'New Tenant'), null);
+});
+
 test('payment queue search matches block and bed identifiers', () => {
   const rows = [
     { studentName: 'Ada Lovelace', bedSpaceId: 'BBH-1-A', transactionRef: 'AIR-1' },

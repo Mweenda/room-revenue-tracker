@@ -7,7 +7,6 @@ import {
   getDaysPastDue,
   type BillingMonth,
 } from "./billing";
-import { lastVerifiedPayment } from "./paymentsEdit";
 import { addBillingMonths, monthsFromTo } from "./paymentTracking";
 import type {
   BedSpace,
@@ -59,6 +58,27 @@ export function occupancyCoverageFromBilling(
     monthsCovered,
     startMonth: addBillingMonths(target, -(monthsCovered - 1)),
   };
+}
+
+/**
+ * Receipt the occupancy card may overwrite. Must be this occupant's verified
+ * payment on this bed. A previous tenant's receipt on a reused bed is left
+ * alone so a routine save cannot rewrite their history.
+ */
+export function occupancyReceiptToEdit(
+  payments: Payment[],
+  bedSpaceId: string,
+  studentName: string,
+): Payment | null {
+  const name = studentName.trim().toLowerCase();
+  if (!name || !bedSpaceId) return null;
+  const matches = payments.filter((payment) => (
+    payment.status === "verified"
+    && payment.bedSpaceId === bedSpaceId
+    && payment.studentName.trim().toLowerCase() === name
+  ));
+  matches.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  return matches[0] ?? null;
 }
 
 export function occupancyEditDefaults(
@@ -227,7 +247,7 @@ export function applyOccupancyAdminEdit(
   if (!record) throw new Error("Billing record not found");
 
   const nextBillingRow = occupancyBillingPatch(record, input, clock);
-  const lastPay = lastVerifiedPayment(payments, input.bedId, name);
+  const lastPay = occupancyReceiptToEdit(payments, input.bedId, name);
   const pay = occupancyPaymentOverride(lastPay, input);
 
   const nextBeds = beds.map((row) => {

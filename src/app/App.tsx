@@ -14,7 +14,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useTrackerData } from "../hooks/useTrackerData";
 import { blocksInData, BILLING_MONTHS, BILLING_STATUS_OVERVIEW, formatBillingPeriodLabel, formatMonthYear, getCurrentBillingMonth, getCurrentYear, type BillingMonth } from "../lib/billing";
 import { addBillingMonths, occupancyReport } from "../lib/paymentTracking";
-import { occupancyCoverageFromBilling, occupancyEditDefaults, type OccupancyAdminEditInput } from "../lib/occupancyBillingEdit";
+import { occupancyCoverageFromBilling, occupancyEditDefaults, occupancyReceiptToEdit, type OccupancyAdminEditInput } from "../lib/occupancyBillingEdit";
 import { formatHeaderDateTime, useLiveDateTime } from "../hooks/useLiveDateTime";
 import { isBedAssignable, displayOptional, isBillingVacant, isVacantName } from "../lib/occupancy";
 import { LandingPage } from "../components/LandingPage";
@@ -51,7 +51,7 @@ import { vacantBedsForGender } from "../lib/studentOnboarding";
 import { landlordRailCompact, landlordRailSpacerClass, LANDLORD_RAIL_COLLAPSE_MS, LANDLORD_RAIL_HOVER_QUERY } from "../lib/landlordSidebar";
 import { compactTitleVisible, headerCollapseProgress } from "../lib/studentPortalHeader";
 import { useStudentViewport } from "../hooks/useStudentViewport";
-import { lastVerifiedPayment, matchesPaymentSearch } from "../lib/paymentsEdit";
+import { matchesPaymentSearch } from "../lib/paymentsEdit";
 import { composeRentReminder, normalizeWhatsAppPhone, whatsappChatUrl } from "../lib/whatsapp";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
@@ -1307,7 +1307,7 @@ function PortalView({ beds, billingMap, payments, billingMonth, onboard, saveOcc
   const lastPayByBed = useMemo(() => {
     const map = new Map<string, Payment>();
     for (const bed of beds) {
-      const last = lastVerifiedPayment(payments, bed.id, bed.student?.name);
+      const last = occupancyReceiptToEdit(payments, bed.id, bed.student?.name ?? "");
       if (last) map.set(bed.id, last);
     }
     return map;
