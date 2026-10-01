@@ -2,7 +2,6 @@ import { applyOccupancyAdminEdit, type OccupancyAdminEditInput } from "../occupa
 import { getSupabase } from "../supabase";
 import type { BedSpace, BillingRecord } from "../types";
 import { mapBilling, mapPayment } from "./mappers";
-import { updatePayment } from "./payments";
 import { updateStudent } from "./tenants";
 
 export async function saveOccupancyAdmin(input: OccupancyAdminEditInput) {
@@ -80,16 +79,22 @@ export async function saveOccupancyAdmin(input: OccupancyAdminEditInput) {
     .eq("id", input.bedId);
   if (rentError) throw rentError;
 
+  // Occupancy writes the ledger itself. Do not go through update_payment —
+  // that RPC refuses amount/bed changes on verified receipts so the Payment
+  // Queue cannot desync billing_records.
   if (next.paymentAction === "update" && next.payment) {
-    await updatePayment({
-      id: next.payment.id,
-      studentName: next.payment.studentName,
-      bedSpaceId: next.payment.bedSpaceId,
-      amount: next.payment.amount,
-      method: next.payment.method,
-      transactionRef: next.payment.transactionRef,
-      submittedAt: next.payment.submittedAt,
-    });
+    const { error: payUpdateError } = await sb
+      .from("payments")
+      .update({
+        student_name: next.payment.studentName,
+        bed_space_id: next.payment.bedSpaceId,
+        amount: next.payment.amount,
+        method: next.payment.method,
+        transaction_ref: next.payment.transactionRef,
+        submitted_at: next.payment.submittedAt,
+      })
+      .eq("id", next.payment.id);
+    if (payUpdateError) throw payUpdateError;
   }
 
   if (next.paymentAction === "insert" && next.payment) {

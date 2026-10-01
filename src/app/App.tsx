@@ -1953,18 +1953,20 @@ function PayView({ payments, beds, billingRecords, verifyPay, rejectPay, updateP
         <ModalFrame onClose={() => setEditTarget(null)} className="max-w-md">
           <div className="p-6 space-y-4 overflow-y-auto">
             <h3 className="font-bold text-slate-900">Edit payment</h3>
-            <p className="text-sm text-slate-500">Manually correct amount, method, reference, date, or the assigned bed.</p>
+            <p className="text-sm text-slate-500">{editTarget.status === "verified"
+              ? "Verified receipts keep their amount and bed so the rent ledger stays in sync. Use occupancy billing to correct those fields."
+              : "Manually correct amount, method, reference, date, or the assigned bed."}</p>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Student
               <input value={editForm.studentName} onChange={(e) => setEditForm((f) => ({ ...f, studentName: e.target.value }))} className={`${inputStyles} mt-1.5`} />
             </label>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Bed space
-              <select value={editForm.bedSpaceId} onChange={(e) => setEditForm((f) => ({ ...f, bedSpaceId: e.target.value }))} className={`${inputStyles} mt-1.5`}>
+              <select value={editForm.bedSpaceId} onChange={(e) => setEditForm((f) => ({ ...f, bedSpaceId: e.target.value }))} className={`${inputStyles} mt-1.5`} disabled={editTarget.status === "verified"}>
                 {beds.map((bed) => <option key={bed.id} value={bed.id}>{bed.id}{bed.student ? ` · ${bed.student.name}` : ""}</option>)}
               </select>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Amount (K)
-                <input type="number" min="1" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} className={`${inputStyles} mt-1.5`} />
+                <input type="number" min="1" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} className={`${inputStyles} mt-1.5`} disabled={editTarget.status === "verified"} />
               </label>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Method
                 <select value={editForm.method} onChange={(e) => setEditForm((f) => ({ ...f, method: e.target.value as PaymentMethod }))} className={`${inputStyles} mt-1.5`}>

@@ -148,19 +148,14 @@ export async function updatePayment(input: {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
-  const edited = applyPaymentEdit(
-    {
-      id: input.id,
-      studentName: input.studentName,
-      bedSpaceId: input.bedSpaceId,
-      amount: input.amount,
-      method: input.method,
-      transactionRef: input.transactionRef,
-      submittedAt: input.submittedAt,
-      status: "pending",
-    },
-    input,
-  );
+  const { data: existingRow, error: existingError } = await sb
+    .from("payments")
+    .select("*")
+    .eq("id", input.id)
+    .single();
+  if (existingError) throw existingError;
+
+  const edited = applyPaymentEdit(mapPayment(existingRow), input);
 
   const { data, error } = await dbFn(sb, "update_payment", {
     p_payment_id: edited.id,
