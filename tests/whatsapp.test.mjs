@@ -5,6 +5,11 @@ const {
   normalizeWhatsAppPhone,
   whatsappChatUrl,
   whatsappBroadcastUrl,
+  whatsappNativeUrl,
+  whatsappWebUrl,
+  resolveWhatsAppLaunch,
+  readWhatsAppClient,
+  writeWhatsAppClient,
   formatWhatsAppNumberList,
   composeBulkRentReminder,
   resolveBulkReminderText,
@@ -45,21 +50,42 @@ test('bulk reminder is one shared message and a phone-less WhatsApp URL', () => 
   assert.match(text, /outstanding balance/i);
   assert.doesNotMatch(text, /Hi Ada/);
   const url = whatsappBroadcastUrl(text);
-  assert.equal(url.startsWith('https://wa.me/?text='), true);
-  assert.equal(decodeURIComponent(new URL(url).searchParams.get('text')), text);
+  assert.equal(url.startsWith('https://web.whatsapp.com/send?'), true);
+  assert.equal(new URL(url).searchParams.get('text'), text);
   assert.equal(formatWhatsAppNumberList(['0977000002', '+260 977 000 003', '']), '260977000002, 260977000003');
   assert.match(resolveBulkReminderText('Pay now {name} in {bed}'), /Pay now there in your bed space/);
+});
+
+test('WhatsApp app and WhatsApp Web get distinct launch URLs', () => {
+  const native = whatsappNativeUrl({ phone: '0977146630', text: 'Please pay rent' });
+  const web = whatsappWebUrl({ phone: '0977146630', text: 'Please pay rent' });
+  assert.equal(native.startsWith('whatsapp://send?'), true);
+  assert.match(native, /phone=260977146630/);
+  assert.equal(web.startsWith('https://web.whatsapp.com/send?'), true);
+  assert.equal(new URL(web).searchParams.get('phone'), '260977146630');
+  assert.equal(new URL(web).searchParams.get('text'), 'Please pay rent');
+  assert.equal(resolveWhatsAppLaunch('web', { text: 'Hi' }).mode, 'web');
+  assert.equal(resolveWhatsAppLaunch('app', { text: 'Hi' }).mode, 'app');
+  assert.equal(resolveWhatsAppLaunch('auto', { text: 'Hi' }).mode, 'app');
+  writeWhatsAppClient('web');
+  assert.equal(readWhatsAppClient(), 'web');
+  writeWhatsAppClient('auto');
+  assert.equal(readWhatsAppClient(), 'auto');
 });
 
 test('the Students WhatsApp gateway sends one reminder to the whole owing list', async () => {
   const { readFileSync } = await import('node:fs');
   const gateway = readFileSync(new URL('../src/app/components/WhatsAppGateway.tsx', import.meta.url), 'utf8');
   const studentsView = readFileSync(new URL('../src/app/views/StudentsView.tsx', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
   assert.match(gateway, /Send to all \$\{recipients\.length\}/);
-  assert.match(gateway, /whatsappBroadcastUrl/);
+  assert.match(gateway, /launchWhatsApp/);
+  assert.match(gateway, /WhatsApp app/);
+  assert.match(gateway, /WhatsApp Web/);
   assert.match(gateway, /New broadcast/);
   assert.match(studentsView, /preferredFilter/);
   assert.match(studentsView, /past_grace/);
+  assert.match(app, /WhatsAppHost/);
 });
 
 test('WhatsApp targeting follows the current student filter and 5-day grace', () => {

@@ -11,7 +11,7 @@ import {
   type LandlordNotification,
   type LandlordNotificationKind,
 } from "../../lib/landlordNotifications";
-import { whatsappChatUrl } from "../../lib/whatsapp";
+import { launchWhatsApp } from "../../lib/whatsappLaunch";
 import type { BedSpace, BillingRecord, IssueStatus, LandlordView, MaintenanceIssue, Payment, RoomGender } from "../../lib/types";
 import { fmtKwacha } from "../../lib/billing";
 import type { StudentAccountRow } from "../../lib/api/students";
@@ -36,9 +36,9 @@ const KIND_TONE: Record<LandlordNotificationKind, string> = {
 };
 
 function openWhatsApp(phone: string, text: string) {
-  const url = whatsappChatUrl(phone, text);
-  const opened = window.open(url, "_blank", "noopener,noreferrer");
-  if (!opened) window.location.href = url;
+  void launchWhatsApp({ phone, text }).catch((err) => {
+    toast.error(err instanceof Error ? err.message : "Could not open WhatsApp");
+  });
 }
 
 export function LandlordNotificationBell({

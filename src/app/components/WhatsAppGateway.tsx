@@ -6,18 +6,15 @@ import { bedLabel } from "../../lib/students";
 import {
   composeRentReminder,
   formatWhatsAppNumberList,
+  readWhatsAppClient,
   resolveBulkReminderText,
   studentsForWhatsAppReminder,
-  whatsappBroadcastUrl,
-  whatsappChatUrl,
+  writeWhatsAppClient,
+  type WhatsAppClient,
   type WhatsAppReminderFilter,
 } from "../../lib/whatsapp";
+import { launchWhatsApp } from "../../lib/whatsappLaunch";
 import type { StudentAccountRow } from "../../lib/api/students";
-
-function openChat(url: string) {
-  const opened = window.open(url, "_blank", "noopener,noreferrer");
-  if (!opened) window.location.href = url;
-}
 
 async function copyText(value: string): Promise<boolean> {
   try {
@@ -42,6 +39,7 @@ export default function WhatsAppGateway({
     selectedIds.size > 0 ? "selected" : preferredFilter ?? "unpaid",
   );
   const [customMessage, setCustomMessage] = useState("");
+  const [client, setClient] = useState<WhatsAppClient>(readWhatsAppClient);
 
   const recipients = useMemo(
     () => studentsForWhatsAppReminder(students, filter, selectedIds),
@@ -76,9 +74,15 @@ export default function WhatsAppGateway({
     });
   }
 
-  function sendOne(row: StudentAccountRow) {
+  function chooseClient(next: WhatsAppClient) {
+    writeWhatsAppClient(next);
+    setClient(next);
+  }
+
+  async function sendOne(row: StudentAccountRow) {
     try {
-      openChat(whatsappChatUrl(row.phone ?? "", messageFor(row)));
+      const opened = await launchWhatsApp({ phone: row.phone, text: messageFor(row), client });
+      toast.success(opened === "app" ? "Opened the WhatsApp app" : "Opened WhatsApp Web in the tracker");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not open WhatsApp");
     }
@@ -88,15 +92,17 @@ export default function WhatsAppGateway({
     if (recipients.length === 0) return;
     try {
       const copied = numberList ? await copyText(numberList) : false;
-      openChat(whatsappBroadcastUrl(bulkMessage));
+      const opened = await launchWhatsApp({ text: bulkMessage, client });
       toast.success(
         recipients.length === 1
-          ? "WhatsApp opened with the reminder"
+          ? opened === "app" ? "Opened the WhatsApp app" : "Opened WhatsApp Web in the tracker"
           : `WhatsApp opened for ${recipients.length} students`,
         {
           description: copied
-            ? "The numbers are on the clipboard. In WhatsApp choose New broadcast or pick those contacts, then send once."
-            : "In WhatsApp choose New broadcast or pick the listed contacts, then send once.",
+            ? opened === "app"
+              ? "The numbers are on the clipboard. In the WhatsApp app choose New broadcast or pick those contacts, then send once."
+              : "The numbers are on the clipboard. In WhatsApp Web choose New broadcast or pick those contacts, then send once."
+            : "Choose New broadcast or pick the listed contacts, then send once.",
         },
       );
     } catch (err) {
@@ -136,7 +142,7 @@ export default function WhatsAppGateway({
               <div>
                 <h3 className="font-bold text-slate-900">WhatsApp gateway</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Send one reminder to every unpaid or overdue student in this list. WhatsApp opens with the message; pick those contacts or a broadcast list and send once.
+                  Send one reminder to the owing list. Auto opens the WhatsApp app if it is installed on this device, otherwise WhatsApp Web inside this page.
                 </p>
               </div>
               <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700 p-1"><X size={18} /></button>
@@ -154,6 +160,23 @@ export default function WhatsAppGateway({
                     type="button"
                     onClick={() => setFilter(value)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${filter === value ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ["auto", "Auto"],
+                  ["app", "WhatsApp app"],
+                  ["web", "WhatsApp Web"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => chooseClient(value)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${client === value ? "bg-emerald-700 text-white" : "bg-emerald-50 text-emerald-800"}`}
                   >
                     {label}
                   </button>

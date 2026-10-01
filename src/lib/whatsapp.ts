@@ -23,6 +23,47 @@ export function normalizeWhatsAppPhone(raw: string | null | undefined): string |
   return null;
 }
 
+export type WhatsAppClient = "auto" | "app" | "web";
+
+export const WHATSAPP_CLIENT_STORAGE_KEY = "rrt.whatsapp.client";
+
+let memoryClient: WhatsAppClient = "auto";
+
+export function readWhatsAppClient(): WhatsAppClient {
+  try {
+    const stored = globalThis.localStorage?.getItem(WHATSAPP_CLIENT_STORAGE_KEY);
+    if (stored === "app" || stored === "web" || stored === "auto") {
+      memoryClient = stored;
+      return stored;
+    }
+  } catch {
+    // localStorage is missing in some test runners.
+  }
+  return memoryClient;
+}
+
+export function writeWhatsAppClient(client: WhatsAppClient): void {
+  memoryClient = client;
+  try {
+    globalThis.localStorage?.setItem(WHATSAPP_CLIENT_STORAGE_KEY, client);
+  } catch {
+    // Keep the in-memory preference when storage is blocked.
+  }
+}
+
+function encodeWhatsAppQuery(input: { phone?: string | null; text: string }): string {
+  const text = input.text.trim();
+  if (!text) throw new Error("Write a reminder before sending");
+  const params = new URLSearchParams();
+  if (input.phone !== undefined && input.phone !== null) {
+    const intl = normalizeWhatsAppPhone(input.phone);
+    if (!intl) throw new Error("This student has no valid WhatsApp number");
+    params.set("phone", intl);
+  }
+  params.set("text", text);
+  return params.toString();
+}
+
 export function whatsappChatUrl(phone: string, text: string): string {
   const intl = normalizeWhatsAppPhone(phone);
   if (!intl) throw new Error("This student has no valid WhatsApp number");
@@ -31,9 +72,27 @@ export function whatsappChatUrl(phone: string, text: string): string {
 
 /** Opens WhatsApp with a pre-filled message so the landlord can pick many contacts at once. */
 export function whatsappBroadcastUrl(text: string): string {
-  const body = text.trim();
-  if (!body) throw new Error("Write a reminder before sending");
-  return `https://wa.me/?text=${encodeURIComponent(body)}`;
+  return whatsappWebUrl({ text });
+}
+
+/** Desktop/mobile WhatsApp registered as an OS protocol handler. */
+export function whatsappNativeUrl(input: { phone?: string | null; text: string }): string {
+  return `whatsapp://send?${encodeWhatsAppQuery(input)}`;
+}
+
+/** WhatsApp Web compose URL — used when the landlord works in the browser. */
+export function whatsappWebUrl(input: { phone?: string | null; text: string }): string {
+  return `https://web.whatsapp.com/send?${encodeWhatsAppQuery(input)}`;
+}
+
+export function resolveWhatsAppLaunch(
+  client: WhatsAppClient,
+  input: { phone?: string | null; text: string },
+): { mode: "app" | "web"; nativeUrl: string; webUrl: string } {
+  const nativeUrl = whatsappNativeUrl(input);
+  const webUrl = whatsappWebUrl(input);
+  if (client === "web") return { mode: "web", nativeUrl, webUrl };
+  return { mode: "app", nativeUrl, webUrl };
 }
 
 export function formatWhatsAppNumberList(phones: Array<string | null | undefined>): string {

@@ -38,6 +38,7 @@ import { StudentWelcomeAd } from "./components/StudentWelcomeAd";
 import { useStudentInbox } from "../hooks/useStudentInbox";
 import { useLandlordInbox } from "../hooks/useLandlordInbox";
 import { LandlordNotificationBell } from "./components/LandlordNotificationBell";
+import { WhatsAppHost } from "./components/WhatsAppHost";
 import {
   findStudentAccountForNotification,
   inboxOpensStudentAccount,
@@ -52,7 +53,8 @@ import { landlordRailCompact, landlordRailSpacerClass, LANDLORD_RAIL_COLLAPSE_MS
 import { compactTitleVisible, headerCollapseProgress } from "../lib/studentPortalHeader";
 import { useStudentViewport } from "../hooks/useStudentViewport";
 import { lastVerifiedPayment, matchesPaymentSearch } from "../lib/paymentsEdit";
-import { composeRentReminder, normalizeWhatsAppPhone, whatsappChatUrl } from "../lib/whatsapp";
+import { composeRentReminder, normalizeWhatsAppPhone } from "../lib/whatsapp";
+import { launchWhatsApp } from "../lib/whatsappLaunch";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
 import { approveStudentApplication, rejectStudentApplication } from "../lib/api";
@@ -276,23 +278,19 @@ function BedCard({ bed, billingRecord, lastPayment, onClick }: { bed: BedSpace; 
 }
 
 function openBedWhatsApp(bed: BedSpace, billing?: BillingRecord) {
-  try {
-    const url = whatsappChatUrl(
-      bed.student?.phone || billing?.phone_number || "",
-      composeRentReminder({
-        name: bed.student?.name || billing?.tenant_name || "there",
-        bedLabel: bed.identifier,
-        balance: billing?.total_balance ?? 0,
-        dueDate: billing?.target_month || "the 1st of the month",
-        daysPastDue: billing?.days_past_due ?? 0,
-        status: billing?.billing_status,
-      }),
-    );
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) window.location.href = url;
-  } catch (err) {
+  void launchWhatsApp({
+    phone: bed.student?.phone || billing?.phone_number || "",
+    text: composeRentReminder({
+      name: bed.student?.name || billing?.tenant_name || "there",
+      bedLabel: bed.identifier,
+      balance: billing?.total_balance ?? 0,
+      dueDate: billing?.target_month || "the 1st of the month",
+      daysPastDue: billing?.days_past_due ?? 0,
+      status: billing?.billing_status,
+    }),
+  }).catch((err) => {
     toast.error(err instanceof Error ? err.message : "Could not open WhatsApp");
-  }
+  });
 }
 
 // ─── Landlord Profile Page ────────────────────────────────────────────────────
@@ -3172,6 +3170,7 @@ export default function App() {
   return (
     <>
       <AppRoutes />
+      <WhatsAppHost />
       <Toaster position="top-right" richColors closeButton />
     </>
   );

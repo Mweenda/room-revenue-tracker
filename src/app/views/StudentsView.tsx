@@ -49,7 +49,8 @@ import WhatsAppGateway from "../components/WhatsAppGateway";
 import { blocksInData, fmtKwacha } from "../../lib/billing";
 import { displayOptional } from "../../lib/occupancy";
 import { bedLabel, filterStudentAccounts, STUDENT_BILLING_FILTERS, STUDENT_TENANT_FILTERS, TENANT_STATUS_LABEL, type StudentBillingFilter, type StudentTenantFilter } from "../../lib/students";
-import { composeRentReminder, whatsappChatUrl } from "../../lib/whatsapp";
+import { composeRentReminder } from "../../lib/whatsapp";
+import { launchWhatsApp } from "../../lib/whatsappLaunch";
 import type { StudentAccountRow } from "../../lib/api/students";
 import { approveStudentApplication, listStudentApplications, rejectStudentApplication } from "../../lib/api";
 import { trackerSyncEvents } from "../../lib/trackerSync";
@@ -503,20 +504,19 @@ export default function StudentsView({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              try {
-                                const url = whatsappChatUrl(row.phone ?? "", composeRentReminder({
+                              void launchWhatsApp({
+                                phone: row.phone,
+                                text: composeRentReminder({
                                   name: row.full_name,
                                   bedLabel: bedLabel(row),
                                   balance: row.total_balance ?? 0,
                                   dueDate: row.due_date ?? "the 1st of the month",
                                   daysPastDue: row.days_past_due ?? 0,
                                   status: row.billing_status,
-                                }));
-                                const opened = window.open(url, "_blank", "noopener,noreferrer");
-                                if (!opened) window.location.href = url;
-                              } catch (err) {
+                                }),
+                              }).catch((err) => {
                                 toast.error(err instanceof Error ? err.message : "Could not open WhatsApp");
-                              }
+                              });
                             }}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
                             title="Remind via WhatsApp"
