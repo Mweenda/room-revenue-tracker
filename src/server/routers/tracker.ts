@@ -62,8 +62,9 @@ import {
 } from "../../lib/api/utilities";
 import { BILLING_MONTHS } from "../../lib/billing";
 import { PAYMENT_METHODS, type BlockCode } from "../../lib/types";
+import { TRPCError } from "@trpc/server";
 import { dbFn } from "../dbFn";
-import { authedProcedure, landlordProcedure, publicProcedure, router } from "../trpc";
+import { authedProcedure, landlordProcedure, publicProcedure, router, studentProcedure } from "../trpc";
 
 const paymentMethod = z.enum(PAYMENT_METHODS);
 const roomGender = z.enum(["Male", "Female"]);
@@ -214,7 +215,7 @@ export const tenantsRouter = router({
       gender: roomGender.optional(),
     }))
     .mutation(({ input }) => onboardStudent(input)),
-  update: landlordProcedure
+  update: studentProcedure
     .input(z.object({
       tenantId: z.string(),
       name: z.string(),
@@ -225,7 +226,19 @@ export const tenantsRouter = router({
       gender: roomGender.optional(),
       sendLoginLink: z.boolean().optional(),
     }))
-    .mutation(({ input }) => updateStudent(input)),
+    .mutation(({ ctx, input }) => {
+      // Student portal profile save is the only caller. It used to sit behind
+      // landlordProcedure, so every signed-in student got "Landlord access is
+      // required". Ignore sendLoginLink: a self-edit must not mint a welcome
+      // invite or recovery mail.
+      if (input.tenantId !== ctx.tenantId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only update your own profile",
+        });
+      }
+      return updateStudent({ ...input, sendLoginLink: false });
+    }),
   vacate: landlordProcedure
     .input(z.object({ bedId: z.string() }))
     .mutation(({ input }) => vacateBedSpace(input.bedId)),
