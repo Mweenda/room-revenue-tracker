@@ -5,6 +5,7 @@ import {
   mapParsedBillingPatches,
   mapParsedPayments,
   mapParsedRosterPatches,
+  preserveLiveLedgerForNewPayments,
 } from "./mapToTracker";
 import { parseBoardingHouseWorkbook } from "./parseBoardingHouse";
 import type { SpreadsheetRepository, SpreadsheetSyncResult } from "./types";
@@ -34,12 +35,19 @@ export async function parseAndSyncUpload(
 
   const mappedPayments = mapParsedPayments(parsed.payments, bedIds);
   const freshPayments = filterNewPayments(mappedPayments, payments);
-  const billingPatches = mapParsedBillingPatches(parsed.billing, billingIds);
+  const billingPatches = preserveLiveLedgerForNewPayments(
+    mapParsedBillingPatches(parsed.billing, billingIds),
+    billing,
+    freshPayments,
+  );
   const rosterPatches = mapParsedRosterPatches(parsed.roster, bedIds);
 
-  const paymentsUpserted = await repo.upsertPayments(freshPayments);
+  // Billing first so a new verified payment applies on top of the live ledger.
+  // Inserting payments first let apply_verified_payment credit the bed, then
+  // the spreadsheet's older total_balance wrote that credit away.
   const billingUpdated = await repo.updateBilling(billingPatches);
   const rosterUpdated = await repo.updateBeds(rosterPatches);
+  const paymentsUpserted = await repo.upsertPayments(freshPayments);
 
   const storagePath = spreadsheetStoragePath(input.landlordId, input.filename);
   await repo.uploadFile(storagePath, input.bytes, XLSX_MIME);

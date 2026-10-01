@@ -11,10 +11,12 @@ const {
   mapParsedPayments,
   mapParsedBillingPatches,
   mapParsedRosterPatches,
+  preserveLiveLedgerForNewPayments,
+  parseAndSyncUpload,
   buildBoardingHouseWorkbookBytes,
   BOARDING_HOUSE_SHEET_NAMES,
 } = await import("../src/lib/spreadsheet/index.ts");
-const { occupancyReport } = await import("../src/lib/paymentTracking.ts");
+const { occupancyReport, applyPaymentToLedger } = await import("../src/lib/paymentTracking.ts");
 const { appRouter } = await import("../src/server/root.ts");
 
 const SHEETS = BOARDING_HOUSE_SHEET_NAMES;
@@ -540,6 +542,32 @@ test("billing and roster patches only update beds that already exist", () => {
   assert.equal(rosterPatches[0].rentAmount, 1000);
 });
 
+test("new spreadsheet payments keep the live ledger instead of the sheet's stale balance", () => {
+  const patches = mapParsedBillingPatches(
+    [
+      {
+        billingId: "BBH-1-A",
+        houseBlock: "BBH",
+        tenantName: "Adrian mulale",
+        phoneNumber: "260977146630",
+        currentRent: 950,
+        entryDate: "2026-06-30",
+        targetMonth: "Sep",
+        accumulatedTotal: 7600,
+        totalBalance: 0,
+        billingStatus: "Paid / Secured",
+      },
+    ],
+    new Set(["BBH-1-A"]),
+  );
+  const live = [billing({ total_balance: 950, target_month: "Sep", accumulated_total: 7600 })];
+  const kept = preserveLiveLedgerForNewPayments(patches, live, [{ bedSpaceId: "BBH-1-A" }]);
+  assert.equal(kept[0].total_balance, 950);
+  assert.equal(kept[0].target_month, "Sep");
+  assert.equal(kept[0].accumulated_total, 7600);
+  assert.equal(kept[0].current_rent, 950);
+});
+
 test("export occupancy totals are occupied plus vacant, not vacant-as-total", async () => {
   const records = [
     billing({}),
@@ -646,6 +674,65 @@ test("export occupancy totals are occupied plus vacant, not vacant-as-total", as
   assert.equal(roundtrip.payments.length, 2);
   assert.equal(roundtrip.roster.length, 2);
   assert.ok(roundtrip.billing.some((row) => row.billingId === "ANX-19-B" && row.billingStatus === "Paid / Secured"));
+});
+
+test("uploading a new receipt applies it on top of the live balance instead of restoring the export", async () => {
+  const liveBilling = billing({ total_balance: 950, target_month: "Sep", billing_status: "OVERDUE / UNPAID" });
+  const ops = [];
+  const repo = memoryRepo({
+    beds: [bed({})],
+    billing: [liveBilling],
+    payments: [],
+  });
+  const originalUpdate = repo.updateBilling.bind(repo);
+  const originalUpsert = repo.upsertPayments.bind(repo);
+  repo.updateBilling = async (patches) => {
+    ops.push("billing");
+    return originalUpdate(patches);
+  };
+  repo.upsertPayments = async (rows) => {
+    ops.push("payments");
+    const count = await originalUpsert(rows);
+    for (const row of rows) {
+      if (row.status !== "verified") continue;
+      const record = repo.state.billing.find((item) => item.billing_id === row.bedSpaceId);
+      if (!record) continue;
+      const ledger = applyPaymentToLedger({
+        totalBalance: record.total_balance,
+        currentRent: record.current_rent,
+        targetMonth: record.target_month,
+        amount: row.amount,
+      });
+      record.total_balance = ledger.totalBalance;
+      record.target_month = ledger.targetMonth;
+    }
+    return count;
+  };
+
+  const bytes = await buildBoardingHouseWorkbookBytes({
+    beds: [bed({})],
+    billingRecords: [billing({ total_balance: 0, target_month: "Sep", billing_status: "Paid / Secured" })],
+    payments: [
+      payment({
+        id: "xlsx-2026-09-19-BBH-1-A",
+        submittedAt: "2026-09-19",
+        amount: 950,
+        transactionRef: "CASH-20260919",
+      }),
+    ],
+  });
+
+  await parseAndSyncUpload(repo, {
+    filename: "Boarding_House_Latest.xlsx",
+    bytes,
+    landlordId: "ll-1",
+  });
+
+  assert.deepEqual(ops, ["billing", "payments"]);
+  assert.equal(repo.state.payments.length, 1);
+  assert.equal(repo.state.payments[0].amount, 950);
+  assert.equal(repo.state.billing[0].total_balance, 0);
+  assert.equal(repo.state.billing[0].target_month, "Sep");
 });
 
 test("tRPC upload rejects non-spreadsheets and students", async () => {

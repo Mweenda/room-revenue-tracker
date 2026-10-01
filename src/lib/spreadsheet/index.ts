@@ -11,6 +11,7 @@ export {
   mapParsedBillingPatches,
   mapParsedPayments,
   mapParsedRosterPatches,
+  preserveLiveLedgerForNewPayments,
   paymentDedupeKey,
   paymentMonthDedupeKey,
   xlsxPaymentId,
