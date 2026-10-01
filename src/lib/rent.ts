@@ -1,4 +1,4 @@
-import type { BedSpace, BlockCode } from "./types";
+import type { BedSpace, BillingRecord, BlockCode } from "./types";
 
 export type RentIncreaseMode = "percentage" | "fixed";
 
@@ -66,6 +66,22 @@ export function buildRentPreview(
       newRent,
       delta: Math.round((newRent - bed.rentAmount) * 100) / 100,
     };
+  });
+}
+
+/**
+ * Forward-only rate change on the live billing row. Outstanding balances and
+ * target months stay put so nobody is pushed into arrears; the next monthly
+ * roll charges `current_rent`.
+ */
+export function applyRentIncrementToBilling(
+  records: BillingRecord[],
+  newRentByBedId: ReadonlyMap<string, number>,
+): BillingRecord[] {
+  return records.map((record) => {
+    const next = newRentByBedId.get(record.billing_id);
+    if (next == null || next === record.current_rent) return record;
+    return { ...record, current_rent: next };
   });
 }
 
