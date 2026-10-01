@@ -1,4 +1,6 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { fetchUserPreferences, upsertUserPreferences } from "./api/preferences";
+import { isSupabaseConfigured } from "./supabase";
 
 export type ColorMode = "light" | "dark";
 
@@ -21,9 +23,21 @@ const ColorModeContext = createContext<ColorModeContextValue | null>(null);
 export function ColorModeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ColorMode>(readStoredMode);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    void fetchUserPreferences().then((prefs) => {
+      if (prefs?.colorMode) {
+        setModeState(prefs.colorMode);
+        window.localStorage.setItem(STORAGE_KEY, prefs.colorMode);
+      }
+    }).catch(() => undefined);
+  }, []);
+
   const setMode = useCallback((next: ColorMode) => {
     setModeState(next);
     window.localStorage.setItem(STORAGE_KEY, next);
+    if (!isSupabaseConfigured) return;
+    void upsertUserPreferences({ colorMode: next }).catch(() => undefined);
   }, []);
 
   const value = useMemo(() => ({ mode, setMode }), [mode, setMode]);

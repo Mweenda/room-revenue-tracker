@@ -40,6 +40,7 @@ import {
   updatePayment,
   verifyPayment,
 } from "../../lib/api/payments";
+import { fetchUserPreferences, upsertUserPreferences } from "../../lib/api/preferences";
 import { updateLandlordProfile } from "../../lib/api/profiles";
 import { applyRentIncrement } from "../../lib/api/rent";
 import { persistFinancialSnapshot } from "../../lib/api/snapshots";
@@ -411,6 +412,17 @@ export const applicationsRouter = router({
   reject: landlordProcedure
     .input(z.object({ applicationId: z.string(), reason: z.string().min(1) }))
     .mutation(({ input }) => rejectStudentApplication(input)),
+});
+
+export const preferencesRouter = router({
+  get: authedProcedure.query(() => fetchUserPreferences()),
+  upsert: authedProcedure
+    .input(z.object({
+      whatsappClient: z.enum(["auto", "app", "web"]).optional(),
+      colorMode: z.enum(["light", "dark"]).nullable().optional(),
+      welcomeAdSeenAt: z.string().nullable().optional(),
+    }))
+    .mutation(({ input }) => upsertUserPreferences(input)),
 });
 
 export const rentRouter = router({

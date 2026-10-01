@@ -184,3 +184,11 @@ export async function approveStudentApplication(...args: Parameters<typeof impor
 export async function rejectStudentApplication(...args: Parameters<typeof import("./applications").rejectStudentApplication>) {
   return (await caller()).applications.reject(args[0]);
 }
+
+export async function fetchUserPreferences() {
+  return (await caller()).preferences.get();
+}
+
+export async function upsertUserPreferences(...args: Parameters<typeof import("./preferences").upsertUserPreferences>) {
+  return (await caller()).preferences.upsert(args[0]);
+}

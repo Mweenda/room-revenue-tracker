@@ -8,47 +8,10 @@ import {
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 import { isVacantName } from "../lib/occupancy";
 import {
-  applySeenLandlordInbox,
-  deriveLocalLandlordInbox,
-  markAllLandlordNotificationsRead,
-  markLandlordNotificationRead,
-  sortLandlordInbox,
   unreadLandlordCount,
   type LandlordNotification,
 } from "../lib/landlordNotifications";
 import type { BillingRecord, MaintenanceIssue, Payment } from "../lib/types";
-
-const READ_STORAGE_KEY = "rrt-landlord-inbox-read";
-
-function readSeenIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = window.localStorage.getItem(READ_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function persistSeenIds(ids: Set<string>) {
-  try {
-    window.localStorage.setItem(READ_STORAGE_KEY, JSON.stringify([...ids]));
-  } catch {
-    /* private mode / quota */
-  }
-}
-
-function rememberSeen(ids: string[]) {
-  const next = readSeenIds();
-  for (const id of ids) next.add(id);
-  persistSeenIds(next);
-  return next;
-}
-
-function withSeen(rows: LandlordNotification[]): LandlordNotification[] {
-  return sortLandlordInbox(applySeenLandlordInbox(rows, readSeenIds()));
-}
 
 function inboxSignature(
   billingRecords: BillingRecord[],
@@ -79,31 +42,20 @@ export function useLandlordInbox(input: {
   );
 
   const refresh = useCallback(async () => {
-    if (!input.enabled) {
+    if (!input.enabled || !isSupabaseConfigured) {
       setItems([]);
-      return;
-    }
-    if (!isSupabaseConfigured) {
-      setItems(withSeen(deriveLocalLandlordInbox({
-        billingRecords: input.billingRecords,
-        payments: input.payments,
-        issues: input.issues,
-      })));
       return;
     }
 
     setLoading(true);
     try {
       await ensureLandlordInbox();
-      const rows = await fetchLandlordNotifications();
-      setItems(withSeen(rows));
+      setItems(await fetchLandlordNotifications());
     } catch {
       // Keep the last successful inbox rather than inventing rows.
     } finally {
       setLoading(false);
     }
-    // signature stands in for billing/payment/issue identity so the clock tick
-    // from live billing refresh does not refetch the inbox every second.
   }, [input.enabled, signature]);
 
   useEffect(() => {
@@ -122,7 +74,7 @@ export function useLandlordInbox(input: {
         { event: "*", schema: "public", table: "landlord_notifications" },
         () => {
           void fetchLandlordNotifications()
-            .then((rows) => setItems(withSeen(rows)))
+            .then(setItems)
             .catch(() => undefined);
         },
       )
@@ -136,36 +88,26 @@ export function useLandlordInbox(input: {
   const open = useCallback(async (id: string) => {
     const current = items.find((item) => item.id === id);
     if (!current) return current ?? null;
-    rememberSeen([id]);
     if (current.readAt) return current;
+    if (!isSupabaseConfigured) return current;
 
-    if (isSupabaseConfigured && !id.startsWith("local:")) {
-      try {
-        const updated = await markLandlordNotificationReadRemote(id);
-        setItems((prev) => withSeen(prev.map((item) => (item.id === id ? updated : item))));
-        return updated;
-      } catch {
-        // Fall through so the unread badge still clears.
-      }
+    try {
+      const updated = await markLandlordNotificationReadRemote(id);
+      setItems((prev) => prev.map((item) => (item.id === id ? updated : item)));
+      return updated;
+    } catch {
+      return current;
     }
-
-    setItems((prev) => sortLandlordInbox(markLandlordNotificationRead(prev, id)));
-    return { ...current, readAt: new Date().toISOString() };
   }, [items]);
 
   const markAllRead = useCallback(async () => {
-    if (unreadLandlordCount(items) === 0) return;
-    rememberSeen(items.map((item) => item.id));
-    if (isSupabaseConfigured && items.some((item) => !item.id.startsWith("local:"))) {
-      try {
-        await markAllLandlordNotificationsReadRemote();
-        setItems((prev) => withSeen(markAllLandlordNotificationsRead(prev)));
-        return;
-      } catch {
-        // Fall through.
-      }
+    if (unreadLandlordCount(items) === 0 || !isSupabaseConfigured) return;
+    try {
+      await markAllLandlordNotificationsReadRemote();
+      setItems(await fetchLandlordNotifications());
+    } catch {
+      // Leave unread until the next successful fetch.
     }
-    setItems((prev) => sortLandlordInbox(markAllLandlordNotificationsRead(prev)));
   }, [items]);
 
   return {

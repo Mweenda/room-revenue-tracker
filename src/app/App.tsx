@@ -57,7 +57,7 @@ import { composeRentReminder, normalizeWhatsAppPhone } from "../lib/whatsapp";
 import { launchWhatsApp } from "../lib/whatsappLaunch";
 import { assertLandlord, isLandlord } from "../lib/authz";
 import type { StudentAccountRow } from "../lib/api/students";
-import { approveStudentApplication, rejectStudentApplication } from "../lib/api";
+import { approveStudentApplication, fetchUserPreferences, rejectStudentApplication } from "../lib/api";
 import type { ApplyRentIncrementResult } from "./components/RentIncrementDialog";
 import type { EvictionResult } from "./views/StudentsView";
 import type { RentIncreaseMode, RentScope } from "../lib/rent";
@@ -2155,7 +2155,20 @@ function StudentPortal({ beds, payments, issues, utilities, billingMap, currentU
   const viewport = useStudentViewport();
 
   useEffect(() => {
-    setShowWelcomeAd(shouldShowWelcomeAd(student.id));
+    let cancelled = false;
+    void fetchUserPreferences().then((prefs) => {
+      if (cancelled) return;
+      if (prefs?.welcomeAdSeenAt) {
+        setShowWelcomeAd(false);
+        return;
+      }
+      setShowWelcomeAd(shouldShowWelcomeAd(student.id));
+    }).catch(() => {
+      if (!cancelled) setShowWelcomeAd(shouldShowWelcomeAd(student.id));
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [student.id]);
 
   useEffect(() => {

@@ -50,6 +50,7 @@ test("tRPC router exposes the former rpc surface", () => {
     "rent",
     "spreadsheet",
     "applications",
+    "preferences",
   ]) {
     assert.ok(name in appRouter._def.record, `missing router ${name}`);
   }

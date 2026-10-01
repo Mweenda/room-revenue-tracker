@@ -1,3 +1,4 @@
+import { upsertUserPreferences } from "./api/preferences";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
 
 export const STUDENT_APP_BUCKET = "student-apps";
@@ -185,6 +186,8 @@ export function shouldShowWelcomeAd(studentId: string, storage: Pick<Storage, "g
 export function markWelcomeAdSeen(studentId: string, storage: Pick<Storage, "setItem"> | null = typeof window === "undefined" ? null : window.localStorage): void {
   if (!studentId || !storage) return;
   storage.setItem(welcomeAdStorageKey(studentId), "seen");
+  if (!isSupabaseConfigured) return;
+  void upsertUserPreferences({ welcomeAdSeenAt: new Date().toISOString() }).catch(() => undefined);
 }
 
 export async function createStudentApkDownload(): Promise<StudentAppDownload> {

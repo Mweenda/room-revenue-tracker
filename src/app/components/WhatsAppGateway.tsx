@@ -13,6 +13,7 @@ import {
   type WhatsAppClient,
   type WhatsAppReminderFilter,
 } from "../../lib/whatsapp";
+import { fetchUserPreferences, upsertUserPreferences } from "../../lib/api/preferences";
 import { launchWhatsApp } from "../../lib/whatsappLaunch";
 import type { StudentAccountRow } from "../../lib/api/students";
 
@@ -60,6 +61,14 @@ export default function WhatsAppGateway({
     if (selectedIds.size > 0) setFilter("selected");
   }, [selectedIds]);
 
+  useEffect(() => {
+    void fetchUserPreferences().then((prefs) => {
+      if (!prefs?.whatsappClient) return;
+      writeWhatsAppClient(prefs.whatsappClient);
+      setClient(prefs.whatsappClient);
+    }).catch(() => undefined);
+  }, []);
+
   function messageFor(row: StudentAccountRow): string {
     if (customMessage.trim()) {
       return customMessage.replaceAll("{name}", row.full_name).replaceAll("{bed}", bedLabel(row));
@@ -77,6 +86,7 @@ export default function WhatsAppGateway({
   function chooseClient(next: WhatsAppClient) {
     writeWhatsAppClient(next);
     setClient(next);
+    void upsertUserPreferences({ whatsappClient: next }).catch(() => undefined);
   }
 
   async function sendOne(row: StudentAccountRow) {

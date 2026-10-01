@@ -7,45 +7,11 @@ import {
 } from "../lib/api";
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 import {
-  applyInboxMemory,
-  deriveLocalInbox,
-  dismissInboxItem,
-  inboxIdentityKeys,
-  markNotificationRead,
   sortInbox,
   unreadCount,
   type StudentNotification,
 } from "../lib/studentNotifications";
 import type { BillingRecord, BlockCode, MaintenanceIssue, Payment, UtilityBlock } from "../lib/types";
-
-const READ_STORAGE_KEY = "rrt-student-inbox-read";
-const DISMISS_STORAGE_KEY = "rrt-student-inbox-dismissed";
-
-function readKeySet(key: string): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function persistKeySet(key: string, ids: Set<string>) {
-  try {
-    window.localStorage.setItem(key, JSON.stringify([...ids]));
-  } catch {
-    /* private mode / quota */
-  }
-}
-
-function rememberKeys(storageKey: string, keys: string[]) {
-  const next = readKeySet(storageKey);
-  for (const key of keys) next.add(key);
-  persistKeySet(storageKey, next);
-  return next;
-}
 
 function studentInboxSignature(input: {
   tenantId?: string;
@@ -87,57 +53,22 @@ export function useStudentInbox(input: {
     input.utilities,
   ]);
 
-  const localFallback = useMemo(() => {
-    if (!input.tenantId) return [];
-    return applyInboxMemory(
-      deriveLocalInbox({
-        tenantId: input.tenantId,
-        bedId: input.bedId,
-        blockCode: input.blockCode,
-        billing: input.billing,
-        payments: input.payments,
-        issues: input.issues,
-        utilities: input.utilities,
-      }),
-      readKeySet(READ_STORAGE_KEY),
-      readKeySet(DISMISS_STORAGE_KEY),
-    );
-    // signature is the identity of billing/payments/issues — not object identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, input.tenantId]);
-
-  const rememberItem = useCallback((item: StudentNotification, kind: "read" | "dismiss") => {
-    const keys = inboxIdentityKeys(item);
-    if (kind === "dismiss") rememberKeys(DISMISS_STORAGE_KEY, keys);
-    rememberKeys(READ_STORAGE_KEY, keys);
-  }, []);
-
   const refresh = useCallback(async () => {
-    if (!input.tenantId) {
+    if (!input.tenantId || !isSupabaseConfigured) {
       setItems([]);
-      return;
-    }
-    if (!isSupabaseConfigured) {
-      setItems(sortInbox(localFallback));
       return;
     }
 
     setLoading(true);
     try {
       await ensureRentDueNotification();
-      const rows = await fetchStudentNotifications();
-      const merged = applyInboxMemory(
-        rows.length > 0 ? rows : localFallback,
-        readKeySet(READ_STORAGE_KEY),
-        readKeySet(DISMISS_STORAGE_KEY),
-      );
-      setItems(sortInbox(merged));
+      setItems(sortInbox(await fetchStudentNotifications()));
     } catch {
-      setItems(sortInbox(localFallback));
+      // Keep the last successful inbox rather than inventing local rows.
     } finally {
       setLoading(false);
     }
-  }, [input.tenantId, localFallback]);
+  }, [input.tenantId, signature]);
 
   useEffect(() => {
     void refresh();
@@ -155,14 +86,7 @@ export function useStudentInbox(input: {
         { event: "*", schema: "public", table: "student_notifications" },
         () => {
           void fetchStudentNotifications()
-            .then((rows) => {
-              if (rows.length === 0) return;
-              setItems(sortInbox(applyInboxMemory(
-                rows,
-                readKeySet(READ_STORAGE_KEY),
-                readKeySet(DISMISS_STORAGE_KEY),
-              )));
-            })
+            .then((rows) => setItems(sortInbox(rows)))
             .catch(() => undefined);
         },
       )
@@ -178,46 +102,27 @@ export function useStudentInbox(input: {
   const open = useCallback(async (id: string) => {
     setSelectedId(id);
     const current = items.find((item) => item.id === id);
-    if (!current) return;
-    rememberItem(current, "read");
-    if (current.readAt) return;
+    if (!current || current.readAt || !isSupabaseConfigured) return;
 
-    if (isSupabaseConfigured && !id.startsWith("local:")) {
-      try {
-        const updated = await markStudentNotificationRead(id);
-        setItems((prev) => sortInbox(applyInboxMemory(
-          prev.map((item) => (item.id === id ? updated : item)),
-          readKeySet(READ_STORAGE_KEY),
-          readKeySet(DISMISS_STORAGE_KEY),
-        )));
-        return;
-      } catch {
-        // Fall through to local mark so the unread dot still clears.
-      }
+    try {
+      const updated = await markStudentNotificationRead(id);
+      setItems((prev) => sortInbox(prev.map((item) => (item.id === id ? updated : item))));
+    } catch {
+      // Leave unread until the next successful fetch.
     }
-
-    setItems((prev) => sortInbox(markNotificationRead(prev, id)));
-  }, [items, rememberItem]);
+  }, [items]);
 
   const dismiss = useCallback(async (id: string) => {
-    const current = items.find((item) => item.id === id);
-    if (current) rememberItem(current, "dismiss");
     if (selectedId === id) setSelectedId(null);
+    if (!isSupabaseConfigured) return;
 
-    if (current && isSupabaseConfigured && !id.startsWith("local:")) {
-      try {
-        await dismissStudentNotification(id);
-      } catch {
-        // Local hide still applies.
-      }
+    try {
+      await dismissStudentNotification(id);
+      setItems((prev) => sortInbox(prev.filter((item) => item.id !== id)));
+    } catch {
+      // Keep the row until the database confirms the dismiss.
     }
-
-    setItems((prev) => sortInbox(applyInboxMemory(
-      dismissInboxItem(prev, id),
-      readKeySet(READ_STORAGE_KEY),
-      readKeySet(DISMISS_STORAGE_KEY),
-    )));
-  }, [items, rememberItem, selectedId]);
+  }, [selectedId]);
 
   const close = useCallback(() => setSelectedId(null), []);
 

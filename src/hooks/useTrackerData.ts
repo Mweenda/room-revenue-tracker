@@ -1,11 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  BILLING_RECORDS,
-  SEED_BEDS,
-  SEED_ISSUES,
-  SEED_PAYMENTS,
-  SEED_UTILITIES,
-} from "../data/seed";
 import * as api from "../lib/api";
 import { calcUtilitySplit, getCurrentBillingMonth, refreshBillingRecord, refreshBillingRecords, BILLING_MONTHS } from "../lib/billing";
 import { applyPaymentToLedger, rollBillingRecords } from "../lib/paymentTracking";
@@ -59,19 +52,12 @@ function reconcileBedsWithBilling(beds: BedSpace[], billingRecords: BillingRecor
   });
 }
 
-// The seed fixtures are a demo dataset for builds with no Supabase credentials.
-// When Supabase is configured the server is the only source of truth, so we
-// start empty rather than rendering fixtures that look like real records.
-const OFFLINE_DEMO = !isSupabaseConfigured;
-
 export function useTrackerData() {
-  const [beds, setBeds] = useState<BedSpace[]>(OFFLINE_DEMO ? SEED_BEDS : []);
-  const [billingRecords, setBillingRecords] = useState<BillingRecord[]>(
-    OFFLINE_DEMO ? refreshBillingRecords(rollBillingRecords(BILLING_RECORDS)) : [],
-  );
-  const [payments, setPayments] = useState<Payment[]>(OFFLINE_DEMO ? SEED_PAYMENTS : []);
-  const [issues, setIssues] = useState<MaintenanceIssue[]>(OFFLINE_DEMO ? SEED_ISSUES : []);
-  const [utilities, setUtilities] = useState<UtilityBlock[]>(OFFLINE_DEMO ? SEED_UTILITIES : []);
+  const [beds, setBeds] = useState<BedSpace[]>([]);
+  const [billingRecords, setBillingRecords] = useState<BillingRecord[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [issues, setIssues] = useState<MaintenanceIssue[]>([]);
+  const [utilities, setUtilities] = useState<UtilityBlock[]>([]);
   // null means "derive from beds/billing" — used in local mode and whenever the
   // tenant-status columns are not deployed yet.
   const [remoteStudents, setRemoteStudents] = useState<StudentAccountRow[] | null>(null);

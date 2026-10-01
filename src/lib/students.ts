@@ -8,8 +8,8 @@ import { rentDueDateIso } from "./rentDue";
 import { BILLING_MONTHS, getCurrentBillingMonth, getCurrentYear, refreshBillingRecord, type BillingMonth } from "./billing";
 
 /**
- * Builds the Students page rows from in-memory beds and billing, so the page
- * behaves identically when Supabase is not configured and the seed data is used.
+ * Builds the Students page rows from beds and billing already loaded from
+ * the database (or an empty in-memory snapshot before the first fetch).
  */
 export function deriveStudentAccounts(
   beds: BedSpace[],
