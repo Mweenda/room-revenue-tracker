@@ -22,7 +22,12 @@ import { createTrackerSync, subscribeTrackerRealtime } from "../lib/trackerSync"
 import { inviteStudentToPortal, sendTenantNotification, sendWelcomeEmail } from "../lib/auth";
 import { deriveStudentAccounts, applyStudentAccountUpdate, applyManualVerifiedPayment, enrichStudentAccounts } from "../lib/students";
 import { applyOccupancyAdminEdit, type OccupancyAdminEditInput } from "../lib/occupancyBillingEdit";
-import { applyPaymentEdit } from "../lib/paymentsEdit";
+import {
+  applyPaymentEdit,
+  assertPaymentMatchesOccupant,
+  rejectPendingPaymentsForBed,
+  retargetPendingPayments,
+} from "../lib/paymentsEdit";
 import { buildRentPreview, type RentIncreaseMode, type RentScope } from "../lib/rent";
 import type { RentIncrementRow } from "../lib/api/rent";
 import type { StudentAccountRow } from "../lib/api/students";
@@ -380,17 +385,25 @@ export function useTrackerData() {
         return saved;
       }
 
+      const currentBed = beds.find((bed) => bed.student?.id === input.tenantId);
       const next = applyStudentAccountUpdate(beds, billingRecords, input);
+      let nextPayments = retargetPendingPayments(payments, {
+        fromBedId: currentBed?.id ?? input.bedSpaceId,
+        toBedId: input.bedSpaceId,
+        fromName: currentBed?.student?.name ?? input.name,
+        toName: input.name.trim(),
+      });
       let nextBilling = next.billingRecords;
       if (input.manualPayment && input.manualPayment.amount > 0) {
-        const paid = applyManualVerifiedPayment(nextBilling, payments, {
+        const paid = applyManualVerifiedPayment(nextBilling, nextPayments, {
           bedSpaceId: input.bedSpaceId,
           studentName: input.name.trim(),
           payment: input.manualPayment,
         });
         nextBilling = paid.billingRecords;
-        setPayments(paid.payments);
+        nextPayments = paid.payments;
       }
+      setPayments(nextPayments);
       setBeds(next.beds);
       setBillingRecords(nextBilling);
       return {
@@ -451,6 +464,7 @@ export function useTrackerData() {
             : r,
         ),
       );
+      setPayments((prev) => rejectPendingPaymentsForBed(prev, bedId, "Tenant vacated"));
     },
     [source],
   );
@@ -635,6 +649,8 @@ export function useTrackerData() {
       }
 
       const payment = payments.find((p) => p.id === id);
+      const occupant = beds.find((bed) => bed.id === payment?.bedSpaceId)?.student?.name;
+      assertPaymentMatchesOccupant(payment?.studentName, occupant, payment?.bedSpaceId);
       setPayments((prev) =>
         prev.map((p) => (p.id === id ? { ...p, status: "verified" as const } : p)),
       );
@@ -657,7 +673,7 @@ export function useTrackerData() {
         );
       }
     },
-    [payments, source],
+    [beds, payments, source],
   );
 
   const rejectPay = useCallback(

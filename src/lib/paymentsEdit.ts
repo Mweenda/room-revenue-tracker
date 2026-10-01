@@ -79,3 +79,59 @@ export function matchesPaymentSearch(
   const compactHaystack = haystack.replace(/[^a-z0-9]/g, "");
   return haystack.includes(needle) || (compactNeedle.length > 0 && compactHaystack.includes(compactNeedle));
 }
+
+function normalizePersonName(name?: string | null): string {
+  return (name ?? "").trim().toLowerCase();
+}
+
+/** True when a receipt still names the student who currently occupies the bed. */
+export function paymentMatchesOccupant(
+  paymentName?: string | null,
+  occupantName?: string | null,
+): boolean {
+  const payment = normalizePersonName(paymentName);
+  const occupant = normalizePersonName(occupantName);
+  return Boolean(payment && occupant && payment === occupant);
+}
+
+export function assertPaymentMatchesOccupant(
+  paymentName?: string | null,
+  occupantName?: string | null,
+  bedSpaceId?: string | null,
+): void {
+  if (paymentMatchesOccupant(paymentName, occupantName)) return;
+  const bed = bedSpaceId?.trim() || "that bed";
+  throw new Error(`This payment no longer belongs to the current occupant of ${bed}`);
+}
+
+/** Eviction / vacate: leftover pending receipts must not stay verifiable. */
+export function rejectPendingPaymentsForBed(
+  payments: Payment[],
+  bedSpaceId: string,
+  reason = "Tenant vacated",
+): Payment[] {
+  return payments.map((payment) => {
+    if (payment.status !== "pending" || payment.bedSpaceId !== bedSpaceId) return payment;
+    return { ...payment, status: "rejected" as const, rejectionReason: reason };
+  });
+}
+
+/** Keep a student's unfinished receipts with them across a name or bed change. */
+export function retargetPendingPayments(
+  payments: Payment[],
+  input: { fromBedId: string; toBedId: string; fromName: string; toName: string },
+): Payment[] {
+  const fromName = normalizePersonName(input.fromName);
+  const toName = input.toName.trim();
+  if (!fromName || !toName || !input.fromBedId) return payments;
+  return payments.map((payment) => {
+    if (payment.status !== "pending") return payment;
+    if (payment.bedSpaceId !== input.fromBedId) return payment;
+    if (normalizePersonName(payment.studentName) !== fromName) return payment;
+    return {
+      ...payment,
+      studentName: toName,
+      bedSpaceId: input.toBedId,
+    };
+  });
+}

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 const { applyStudentAccountUpdate, applyManualVerifiedPayment, deriveStudentAccounts } =
   await import('../src/lib/students.ts');
+const { retargetPendingPayments } = await import('../src/lib/paymentsEdit.ts');
 
 function student(id, name, email) {
   return { id, name, email, phone: '0970000000', nrc: '123456/78/9', moveInDate: '2026-02-01' };
@@ -123,6 +124,36 @@ test('cannot reuse another active student phone', () => {
     }),
     /already assigned/,
   );
+});
+
+test('moving a student keeps their pending receipt on the new bed', () => {
+  const next = applyStudentAccountUpdate(BEDS, BILLING, {
+    tenantId: 't1',
+    name: 'Ada Lovelace',
+    phone: '0970000000',
+    email: 'ada@example.com',
+    moveInDate: '2026-02-01',
+    bedSpaceId: 'BBH-1-B',
+    rentAmount: 850,
+  });
+  const pending = [{
+    id: 'p-ada',
+    studentName: 'Ada Lovelace',
+    bedSpaceId: 'BBH-1-A',
+    amount: 450,
+    method: 'Airtel',
+    transactionRef: 'TXN-ADA',
+    submittedAt: '2026-09-20',
+    status: 'pending',
+  }];
+  const moved = retargetPendingPayments(pending, {
+    fromBedId: 'BBH-1-A',
+    toBedId: next.beds.find((bed) => bed.student?.id === 't1').id,
+    fromName: 'Ada Lovelace',
+    toName: 'Ada Lovelace',
+  });
+  assert.equal(moved[0].bedSpaceId, 'BBH-1-B');
+  assert.equal(moved[0].status, 'pending');
 });
 
 test('a landlord cash receipt applies to the billing ledger', () => {
