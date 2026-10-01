@@ -9,6 +9,8 @@ export async function saveOccupancyAdmin(input: OccupancyAdminEditInput) {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase not configured");
 
+  // Occupancy billing has no NRC field. Omit it so a receipt-date correction
+  // cannot null out the student's national ID.
   await updateStudent({
     tenantId: input.tenantId,
     name: input.name,
