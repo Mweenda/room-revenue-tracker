@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const {
   INVITE_MIN_TTL_MS,
@@ -76,4 +78,15 @@ test('onboarding walks gender → bed → personal info → password', () => {
     password: 'short',
     confirmPassword: 'short',
   }).error ?? '', /6/);
+});
+
+test("new occupancy ledgers use the Lusaka billing month, not UTC", () => {
+  const sql = readFileSync(join(process.cwd(), "supabase/migrations/030_onboard_billing_month.sql"), "utf8");
+  assert.match(sql, /v_month text := public\.current_billing_month\(\);/);
+  assert.match(
+    sql,
+    /coalesce\(nullif\(btrim\(coalesce\(p_target_month, ''\)\), ''\), public\.current_billing_month\(\)\)/,
+  );
+  assert.match(sql, /public\.onboard_student\(\s*[\s\S]*public\.current_billing_month\(\),/);
+  assert.doesNotMatch(sql, /to_char\(timezone\('UTC', now\(\)\), 'Mon'\)/);
 });
