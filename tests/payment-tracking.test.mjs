@@ -174,6 +174,59 @@ test("blank tenant names are treated as vacant and stay empty", () => {
   assert.equal(rolled.billing_status, "Vacant");
 });
 
+test("a fresh onboard stamped with last month is charged again on the 1st", () => {
+  // Application approval used to_char(UTC). At 00:30 Lusaka on 1 Oct, UTC is
+  // still 30 Sep, so the new ledger was target=Sep / balance=one month of rent.
+  // roll_billing_cycle then treats September as arrears and adds October.
+  const stampedLastMonth = rollBillingRecord(
+    {
+      billing_id: "BBH-1-A",
+      house_block: "BBH",
+      room_number: "1",
+      bed_space: "A",
+      room_gender: "Male",
+      tenant_name: "Gift Nankamba",
+      phone_number: "260977000000",
+      entry_date: "2026-10-01",
+      current_rent: 950,
+      target_month: "Sep",
+      accumulated_total: 950,
+      total_balance: 950,
+      days_past_due: 0,
+      billing_status: "Open Window",
+    },
+    "Oct",
+    new Date("2026-10-01T00:30:00+02:00"),
+  );
+  assert.equal(stampedLastMonth.total_balance, 1900);
+  assert.equal(stampedLastMonth.accumulated_total, 1900);
+  assert.equal(stampedLastMonth.target_month, "Sep");
+
+  const stampedLiveMonth = rollBillingRecord(
+    {
+      billing_id: "BBH-1-A",
+      house_block: "BBH",
+      room_number: "1",
+      bed_space: "A",
+      room_gender: "Male",
+      tenant_name: "Gift Nankamba",
+      phone_number: "260977000000",
+      entry_date: "2026-10-01",
+      current_rent: 950,
+      target_month: "Oct",
+      accumulated_total: 950,
+      total_balance: 950,
+      days_past_due: 0,
+      billing_status: "Open Window",
+    },
+    "Oct",
+    new Date("2026-10-01T12:00:00+02:00"),
+  );
+  assert.equal(stampedLiveMonth.total_balance, 950);
+  assert.equal(stampedLiveMonth.accumulated_total, 950);
+  assert.equal(stampedLiveMonth.target_month, "Oct");
+});
+
 test("a verified payment clears the oldest unpaid month first", () => {
   const half = applyPaymentToLedger({
     totalBalance: 1800,
