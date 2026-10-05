@@ -44,7 +44,7 @@ function mapApplication(row: ApplicationRow): StudentApplication {
   };
 }
 
-/** Public self-onboarding: create (or refresh) a pending bed-space request. */
+/** Public self-onboarding: create a pending bed-space request. A second pending submit for the same email is rejected. */
 export async function submitStudentApplication(
   input: SubmitStudentApplicationInput,
 ): Promise<StudentApplication> {
