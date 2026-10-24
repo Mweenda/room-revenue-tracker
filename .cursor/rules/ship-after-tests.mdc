@@ -20,4 +20,7 @@ If a chunk notice appears, optimize (`manualChunks`, lazy routes) and re-run ver
 - Verify: `npm run verify` (`typecheck && test && node scripts/verify-build.mjs`)
 - GitHub `dev` via HTTPS: `git push https://github.com/Mweenda/room-revenue-tracker.git HEAD:dev`
 - Backend (migrations / RPCs / Edge Functions): `npm run deploy:db` and function deploys as needed
-- Live: `npm run deploy:hosting` → https://room-revenue-tracker.web.app
+- Live preview: `npm run deploy:preview` (30-day Firebase Hosting channel). Use this when the requested target is a preview.
+- Production: `npm run deploy:hosting` → https://room-revenue-tracker.web.app, only when a production release is intended.
+
+For admin authentication changes, confirm the Supabase project is active before deploying. Provision credentials only through the protected admin bootstrap, never in client code or committed files. Verify a fresh Supabase sign-in, the `is_admin` authorization check, and an authenticated dashboard data load before publishing the frontend. If Supabase or Firebase access is unavailable, stop and report which verification or deployment could not be completed; do not describe the account as provisioned or the app as deployed.

@@ -133,6 +133,20 @@ Landlord-only actions are gated twice:
 
 **Residual risk:** `is_landlord()` matches a profile by `auth_user_id` or by email for legacy rows. A landlord must sign in once after 006 so `link_landlord_profile()` stamps `auth_user_id`. Until that happens, JWT-email matching is the fallback. Offline demo login is opt-in via `VITE_ENABLE_DEMO_LOGIN=true` and is disabled whenever Supabase is configured.
 
+### Admin authentication and data
+
+The admin signs in with Supabase Auth; the browser never contains an admin password or service-role key. The current primary admin email is `edwardbwalya@gmail.com`. The password is set through the protected `bootstrap-admin` action in the `admin` Edge Function, which also updates the admin's persistent `profiles` row and links it to the Supabase Auth user. Supabase Auth stores the password as a credential hash; do not add passwords to source, `.env` files committed to Git, logs, screenshots, or this documentation.
+
+To provision or change the primary admin password:
+
+1. Confirm the configured Supabase project is **ACTIVE** and its migrations, including migration 014, are applied.
+2. Deploy the `admin` Edge Function. Its `ADMIN_BOOTSTRAP_SECRET` must already be configured in Supabase secrets.
+3. Invoke `bootstrap-admin` over HTTPS with the bootstrap secret and the password supplied through a secure, non-logged input channel. Do not put the password in source control, a URL, shell command arguments, or CI logs.
+4. Confirm the function returns success, sign in with Supabase Auth, confirm `auth.isAdmin()` succeeds, and confirm the admin dashboard loads its RLS-protected data.
+5. Only then deploy the frontend preview. A successful frontend build or an already-open admin session does not prove that the backend credential is provisioned or that a fresh sign-in works.
+
+The login UI may display the admin email, but it must never display or prefill the password. `adminLogin` verifies the Supabase password and checks the `is_admin` authorization procedure before allowing admin access. `fetchAdminData` sends its seven independent Supabase reads concurrently; keep this parallel behavior when changing the dashboard data flow. If Supabase reports the project as inactive or unavailable, stop: authentication, persistence, and backend connectivity cannot be verified until the project is restored.
+
 ## Tests
 
 ```bash
@@ -152,10 +166,10 @@ Hosting is configured in [`firebase.json`](firebase.json) for the `room-revenue-
 ```bash
 firebase login
 npm run deploy:preview   # preview channel (30-day URL)
-npm run deploy:hosting   # production
+npm run deploy:hosting   # production (only when a production release is intended)
 ```
 
-Set `VITE_*` env vars before building so the deployed bundle includes Supabase and Firebase config. Vite inlines env at build time.
+Set `VITE_*` env vars before building so the deployed bundle includes Supabase and Firebase config. Vite inlines env at build time. Preview deployment requires an authenticated Firebase account with Hosting access; production and preview are separate release targets.
 
 ## Project layout
 

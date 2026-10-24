@@ -56,7 +56,7 @@ When a chunk notice appears:
 4. **Do not** raise `chunkSizeWarningLimit` just to hide the notice.
 5. Re-run `npm run verify` until the build is successful **and** the log has no chunking notice or error.
 
-Only after that verify is green: commit, then GitHub, then Supabase (if backend), then Firebase.
+Only after that verify is green: commit, then GitHub, then Supabase (if backend), then the requested Firebase target.
 
 ## 2. Commit
 
@@ -81,15 +81,34 @@ If Auto-review blocks `db push`, retry with native approval. If there are no pen
 
 ## 5. Firebase (live site)
 
+For a requested live preview, use the preview channel rather than production:
+
+```bash
+npm run deploy:preview
+```
+
+Use the production command only when a production release is intended:
+
 ```bash
 npm run deploy:hosting
 ```
 
 Live URL: https://room-revenue-tracker.web.app
 
-Firebase hosting must use the project-owner Google account.
+Firebase hosting must use an authenticated account with permission for the target project/site.
 
 `deploy:hosting` builds again. If that build prints a chunk notice, stop, optimize, re-verify, and only then re-deploy. Do not release a chunk-warning build.
+
+## Admin authentication changes
+
+Admin credentials are persistent Supabase Auth credentials, not browser constants. Never put an admin password, service-role key, or bootstrap secret in source code, committed environment files, URLs, shell arguments, screenshots, or logs.
+
+1. Confirm the configured Supabase project is active and the required schema/migrations are applied. If the project is inactive or inaccessible, stop; do not claim the login works.
+2. Deploy the `admin` Edge Function and provision the primary admin with its secret-guarded `bootstrap-admin` action. Supply the password through a secure, non-logged input channel.
+3. Verify a fresh sign-in against Supabase Auth, confirm `is_admin` authorizes the user, and load the admin dashboard's protected backend data.
+4. Deploy the requested Firebase target only after backend authentication and persistence are confirmed.
+
+An already-authenticated browser session, a green frontend build, or a visible email in the login dialog does not verify that new credentials are provisioned.
 
 ## Skip
 
