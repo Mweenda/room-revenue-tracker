@@ -45,6 +45,14 @@ export function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
           <p className="text-slate-300 mt-2">Onboard and manage landlords</p>
         </div>
 
+        <div className="mb-5 rounded-xl border border-white/15 bg-white/5 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Admin login details</p>
+          <p className="mt-2 text-sm text-slate-300">
+            Email: <span className="font-medium text-white">edwardbwalya@gmail.com</span>
+          </p>
+          <p className="mt-1 text-xs text-slate-400">Enter your password below. Passwords are not displayed here.</p>
+        </div>
+
         {error && (
           <div className="flex items-center gap-2 bg-red-500/20 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl mb-4 text-sm">
             <AlertCircle size={16} />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchAdminData, type AdminData } from "../lib/api/admin";
 
 const EMPTY: AdminData = {
@@ -23,28 +23,33 @@ export function useAdminData() {
   const [data, setData] = useState<AdminData>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
+  const mounted = useRef(false);
 
   const refresh = useCallback(async () => {
+    const currentRequestId = ++requestId.current;
+    setLoading(true);
     setError(null);
     try {
       const next = await fetchAdminData();
-      setData(next);
+      if (mounted.current && currentRequestId === requestId.current) setData(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load admin data");
+      if (mounted.current && currentRequestId === requestId.current) {
+        setError(err instanceof Error ? err.message : "Could not load admin data");
+      }
     } finally {
-      setLoading(false);
+      if (mounted.current && currentRequestId === requestId.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    let active = true;
-    setLoading(true);
-    void fetchAdminData()
-      .then((next) => { if (active) setData(next); })
-      .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Could not load admin data"); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
+    mounted.current = true;
+    void refresh();
+    return () => {
+      mounted.current = false;
+      requestId.current += 1;
+    };
+  }, [refresh]);
 
   return { ...data, loading, error, refresh };
 }
