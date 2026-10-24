@@ -1,6 +1,7 @@
 import { getSupabase } from './supabase';
 import { createAppCaller, invalidateAppCaller } from './trpc';
 import { normalizeEmail } from './email';
+import { BACKEND_UNAVAILABLE_MESSAGE, isBackendUnavailable } from './backendErrors';
 
 export { normalizeEmail } from './email';
 
@@ -468,11 +469,24 @@ export async function adminLogin(credentials: LoginCredentials): Promise<{ succe
     password: credentials.password,
   });
   if (authError || !authData.user) {
+    if (isBackendUnavailable(authError)) {
+      return { success: false, message: BACKEND_UNAVAILABLE_MESSAGE };
+    }
     return { success: false, message: 'Invalid admin email or password' };
   }
 
   invalidateAppCaller();
-  const isAdmin = await (await createAppCaller()).auth.isAdmin();
+  let isAdmin: boolean;
+  try {
+    isAdmin = await (await createAppCaller()).auth.isAdmin();
+  } catch (error) {
+    const { error: signOutError } = await sb.auth.signOut({ scope: 'local' });
+    if (signOutError) throw signOutError;
+    if (isBackendUnavailable(error)) {
+      return { success: false, message: BACKEND_UNAVAILABLE_MESSAGE };
+    }
+    throw error;
+  }
   if (!isAdmin) {
     await sb.auth.signOut();
     return { success: false, message: 'This account is not an RRT admin.' };

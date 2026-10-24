@@ -27,11 +27,12 @@ async function buildContext(): Promise<AppContext> {
       ];
 
   const landlordId = landlord.error ? null : landlord.data;
+  if (admin.error) throw admin.error;
   return {
     supabase: sb,
     landlordId,
     tenantId: tenant.error ? null : tenant.data,
-    isAdmin: admin.error ? false : admin.data === true,
+    isAdmin: admin.data === true,
     repo: createSpreadsheetRepo(sb),
   };
 }

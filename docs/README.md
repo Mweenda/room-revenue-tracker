@@ -147,6 +147,8 @@ To provision or change the primary admin password:
 
 The login UI may display the admin email, but it must never display or prefill the password. `adminLogin` verifies the Supabase password and checks the `is_admin` authorization procedure before allowing admin access. `fetchAdminData` sends its seven independent Supabase reads concurrently; keep this parallel behavior when changing the dashboard data flow. If Supabase reports the project as inactive or unavailable, stop: authentication, persistence, and backend connectivity cannot be verified until the project is restored.
 
+If the browser reports `ERR_NAME_NOT_RESOLVED` for the configured Supabase hostname, the browser cannot reach the backend; check the project status and configured project URL before rotating credentials. The hosting `Content-Security-Policy-Report-Only` header logs policy violations without blocking the app. Do not add `unsafe-eval` to the policy just to suppress a report-only console warning.
+
 ## Tests
 
 ```bash
