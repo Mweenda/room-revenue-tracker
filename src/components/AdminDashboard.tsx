@@ -48,7 +48,7 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
     return () => { active = false; };
   }, []);
 
-  const adminEmail = admin?.email ?? "admin@rrt.io";
+  const adminEmail = admin?.email ?? "edwardbwalya@gmail.com";
   const activeNav = useMemo(() => NAV.find((n) => n.id === section) ?? NAV[0], [section]);
 
   const NavList = ({ onNavigate, compact = false }: { onNavigate?: () => void; compact?: boolean }) => (

@@ -9,7 +9,7 @@ interface AdminLoginProps {
 export function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [credentials, setCredentials] = useState({ email: "", password: "" });
+  const [credentials, setCredentials] = useState({ email: "edwardbwalya@gmail.com", password: "" });
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -61,7 +61,7 @@ export function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 type="email"
                 value={credentials.email}
                 onChange={(e) => setCredentials({ ...credentials, email: e.target.value })}
-                placeholder="admin@rrt.io"
+                placeholder="edwardbwalya@gmail.com"
                 autoComplete="username"
                 className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-white placeholder-slate-500"
                 required

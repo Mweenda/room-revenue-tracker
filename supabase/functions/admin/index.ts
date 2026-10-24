@@ -15,8 +15,9 @@
 // supabase/config.toml) so the OPTIONS preflight and secret-guarded bootstrap
 // can reach the handler.
 
-const ADMIN_EMAIL = "admin@rrt.io";
-const ADMIN_FULL_NAME = "RRT Admin";
+const LEGACY_ADMIN_EMAIL = "admin@rrt.io";
+const ADMIN_EMAIL = "edwardbwalya@gmail.com";
+const ADMIN_FULL_NAME = "Edward Bwalya";
 const BAN_DURATION = "876000h"; // ~100 years
 
 const corsHeaders = {
@@ -194,25 +195,85 @@ async function bootstrapAdmin(req: Request, body: any): Promise<Response> {
   if (!password) {
     return Response.json({ error: "An initial admin password is required" }, { status: 400 });
   }
+  if (password.length < 8) {
+    return Response.json({ error: "The initial admin password must be at least 8 characters" }, { status: 400 });
+  }
 
   const { createAdminClient } = await import("npm:@supabase/server/core");
   const admin = createAdminClient();
 
-  const user = await ensureAuthUser(admin, ADMIN_EMAIL, password, ADMIN_FULL_NAME, "admin");
-  if ("error" in user) {
-    return Response.json({ error: user.error }, { status: user.status });
+  const { data: previousAdmin, error: previousAdminError } = await admin
+    .from("profiles")
+    .select("id, auth_user_id")
+    .ilike("email", LEGACY_ADMIN_EMAIL)
+    .maybeSingle();
+  if (previousAdminError) {
+    return Response.json({ error: previousAdminError.message }, { status: 500 });
+  }
+  const { data: targetProfile, error: targetProfileError } = await admin
+    .from("profiles")
+    .select("id")
+    .ilike("email", ADMIN_EMAIL)
+    .maybeSingle();
+  if (targetProfileError) {
+    return Response.json({ error: targetProfileError.message }, { status: 500 });
+  }
+  if (previousAdmin && targetProfile && targetProfile.id !== previousAdmin.id) {
+    return Response.json(
+      { error: "The new admin email is already assigned to another profile." },
+      { status: 409 },
+    );
   }
 
-  const profile = await upsertProfile(admin, {
-    role: "admin",
-    fullName: ADMIN_FULL_NAME,
-    email: ADMIN_EMAIL,
-    phone: null,
-    address: null,
-    authUserId: user.userId,
-  });
-  if ("error" in profile) {
-    return Response.json({ error: profile.error }, { status: 500 });
+  let userId: string;
+  if (previousAdmin?.auth_user_id) {
+    const { data: updatedUser, error: updateUserError } = await admin.auth.admin.updateUserById(
+      previousAdmin.auth_user_id,
+      {
+        email: ADMIN_EMAIL,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: ADMIN_FULL_NAME, role: "admin" },
+      },
+    );
+    if (updateUserError) {
+      return Response.json({ error: updateUserError.message }, { status: 409 });
+    }
+    userId = updatedUser.user.id;
+  } else {
+    const user = await ensureAuthUser(admin, ADMIN_EMAIL, password, ADMIN_FULL_NAME, "admin");
+    if ("error" in user) {
+      return Response.json({ error: user.error }, { status: user.status });
+    }
+    userId = user.userId;
+  }
+
+  if (previousAdmin) {
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update({
+        role: "admin",
+        full_name: ADMIN_FULL_NAME,
+        email: ADMIN_EMAIL,
+        auth_user_id: userId,
+        status: "active",
+      })
+      .eq("id", previousAdmin.id);
+    if (profileError) {
+      return Response.json({ error: profileError.message }, { status: 500 });
+    }
+  } else {
+    const profile = await upsertProfile(admin, {
+      role: "admin",
+      fullName: ADMIN_FULL_NAME,
+      email: ADMIN_EMAIL,
+      phone: null,
+      address: null,
+      authUserId: userId,
+    });
+    if ("error" in profile) {
+      return Response.json({ error: profile.error }, { status: 500 });
+    }
   }
 
   return Response.json({ success: true, email: ADMIN_EMAIL });

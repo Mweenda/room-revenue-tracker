@@ -480,7 +480,12 @@ export async function adminLogin(credentials: LoginCredentials): Promise<{ succe
 
   return {
     success: true,
-    user: { id: authData.user.id, email: authData.user.email ?? email, name: 'RRT Admin', role: 'Admin' },
+    user: {
+      id: authData.user.id,
+      email: authData.user.email ?? email,
+      name: authData.user.user_metadata?.full_name ?? 'RRT Admin',
+      role: 'Admin',
+    },
     message: 'Login successful',
   };
 }
